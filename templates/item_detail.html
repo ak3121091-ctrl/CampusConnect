@@ -1,0 +1,307 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ item.title }} - CampusConnect Detail{% endblock %}
+
+{% block content %}
+<div class="detail-container">
+
+    <!-- Breadcrumb / Back Link -->
+    <nav class="breadcrumb-nav" aria-label="Breadcrumb">
+        <a href="{{ url_for('index') }}" class="back-link">
+            <span class="back-arrow">&larr;</span> Back to Campus Directory
+        </a>
+        <span class="breadcrumb-divider">/</span>
+        <span class="breadcrumb-current">{{ item.title }}</span>
+    </nav>
+
+    <!-- Detail Header Card -->
+    <div class="detail-header-card {% if item.status == 'resolved' %}header-resolved{% endif %}">
+        <div class="detail-badges">
+            {% if item.item_type == 'lost' %}
+                <span class="pill-badge pill-lost pill-lg">🔍 LOST ITEM</span>
+            {% else %}
+                <span class="pill-badge pill-found pill-lg">🎁 FOUND ITEM</span>
+            {% endif %}
+
+            {% if item.status == 'resolved' %}
+                <span class="pill-badge pill-status-resolved pill-lg">✔️ RESOLVED</span>
+            {% else %}
+                <span class="pill-badge pill-status-open pill-lg">🟢 OPEN CASE</span>
+            {% endif %}
+
+            {% if item.is_demo %}
+                <span class="pill-badge pill-demo pill-lg" title="Demonstration sample record">DEMO DATA</span>
+            {% endif %}
+        </div>
+
+        <h1 class="detail-title">{{ item.title }}</h1>
+
+        <div class="detail-header-meta">
+            <span class="meta-item"><span class="meta-icon" aria-hidden="true">👤</span> Reported by: <strong>{{ item.poster_name }}</strong></span>
+            <span class="meta-separator" aria-hidden="true">&bull;</span>
+            <span class="meta-item"><span class="meta-icon" aria-hidden="true">🕒</span> Recorded on: {{ item.created_at }}</span>
+            <span class="meta-separator" aria-hidden="true">&bull;</span>
+            <span class="category-chip">
+                {% if item.category == 'Electronics' %}💻
+                {% elif item.category == 'Student IDs & Keys' %}🔑
+                {% elif item.category == 'Books & Stationery' %}📚
+                {% elif item.category == 'Bags & Backpacks' %}🎒
+                {% elif item.category == 'Clothing & Accessories' %}👕
+                {% else %}📦{% endif %}
+                {{ item.category }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Main Content 2-Column Grid -->
+    <div class="detail-grid">
+
+        <!-- Left Column: Item Information & Owner Controls -->
+        <div class="detail-col-info">
+            <div class="content-panel info-panel">
+                <div class="panel-header-simple">
+                    <span class="panel-icon-badge" aria-hidden="true">📋</span>
+                    <h2 class="panel-heading">Item Information</h2>
+                </div>
+
+                <div class="info-list">
+                    <div class="info-item">
+                        <span class="info-icon" aria-hidden="true">📍</span>
+                        <div class="info-body">
+                            <span class="info-label">Campus Location</span>
+                            <span class="info-value highlight-location">{{ item.location }}</span>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <span class="info-icon" aria-hidden="true">📅</span>
+                        <div class="info-body">
+                            <span class="info-label">Date Lost or Found</span>
+                            <span class="info-value">{{ item.event_date }}</span>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <span class="info-icon" aria-hidden="true">🏷️</span>
+                        <div class="info-body">
+                            <span class="info-label">Category Classification</span>
+                            <span class="info-value">{{ item.category }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="description-block">
+                    <h3 class="desc-heading">Item Description &amp; Distinguishing Marks</h3>
+                    <div class="desc-content">
+                        {{ item.description }}
+                    </div>
+                </div>
+
+                <!-- Privacy Guarantee Banner -->
+                <div class="privacy-guarantee">
+                    <span class="privacy-icon" aria-hidden="true">🔒</span>
+                    <div class="privacy-text">
+                        <strong>Privacy Safeguard Active:</strong> The poster's direct email and telephone are safely encrypted in SQLite and never displayed to public visitors. Inquiries are stored in the private inbox below.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Owner Action Panel (Resolve / Reopen with PIN) -->
+            <div class="content-panel owner-panel" id="resolutionControls">
+                <div class="panel-header-with-badge">
+                    <div class="panel-title-with-icon">
+                        <span class="panel-icon-badge" aria-hidden="true">🛡️</span>
+                        <h2 class="panel-heading">Item Resolution Controls</h2>
+                    </div>
+                    <span class="auth-required-badge">PIN Required</span>
+                </div>
+                <p class="panel-subtext">
+                    Only the person who posted this item can change its status. Enter your Security PIN to mark this case as resolved or reopen it.
+                </p>
+
+                {% if item.is_demo %}
+                    <div class="demo-pin-hint">
+                        💡 <strong>Hackathon Demo Note:</strong> This is a sample item. You can test resolution with demo PIN: <code>1234</code>.
+                    </div>
+                {% endif %}
+
+                <form action="{{ url_for('update_status', item_id=item.id) }}" method="POST" class="status-action-form">
+                    <div class="form-group">
+                        <label for="statusPin" class="form-label required">Enter Poster Security PIN</label>
+                        <div class="pin-input-wrap">
+                            <input
+                                type="password"
+                                id="statusPin"
+                                name="pin"
+                                class="form-control pin-input"
+                                placeholder="Enter 4-to-8 digit PIN"
+                                pattern="[0-9]{4,8}"
+                                inputmode="numeric"
+                                maxlength="8"
+                                required
+                            >
+                            <button type="button" class="btn-pin-toggle" onclick="togglePin('statusPin')" aria-label="Toggle PIN visibility">👁️</button>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons-row">
+                        {% if item.status == 'open' %}
+                            <input type="hidden" name="status" value="resolved">
+                            <button type="submit" class="btn-resolve">
+                                ✔️ Mark as Resolved / Reunited
+                            </button>
+                        {% else %}
+                            <input type="hidden" name="status" value="open">
+                            <button type="submit" class="btn-reopen">
+                                🔄 Reopen this Item
+                            </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right Column: Safe Contact Request Interface & Poster Inbox -->
+        <div class="detail-col-contact">
+
+            <!-- 1. Safe Contact Request Interface -->
+            <div class="content-panel contact-panel" id="contactSection">
+                <div class="panel-header-simple">
+                    <span class="panel-icon-badge" aria-hidden="true">✉️</span>
+                    <div>
+                        <h2 class="panel-heading">Safe Contact &amp; Inquiry</h2>
+                        <span class="panel-sub-label">Private, secure message to poster</span>
+                    </div>
+                </div>
+                <p class="panel-subtext">
+                    Have you found this item, or does it belong to you? Submit a claim message below. Your note is stored directly in CampusConnect for the poster to read with their secret PIN.
+                </p>
+
+                <form action="{{ url_for('submit_contact_request', item_id=item.id) }}" method="POST" class="contact-inquiry-form">
+                    <div class="form-group">
+                        <label for="sender_name" class="form-label required">Your Full Name</label>
+                        <input
+                            type="text"
+                            id="sender_name"
+                            name="sender_name"
+                            class="form-control"
+                            placeholder="e.g., Casey Miller"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sender_contact" class="form-label required">Your Campus Email or Phone</label>
+                        <input
+                            type="text"
+                            id="sender_contact"
+                            name="sender_contact"
+                            class="form-control"
+                            placeholder="e.g., casey@campus.edu or (555) 234-5678"
+                            required
+                        >
+                        <span class="form-help">Provided so the poster can reply and coordinate handover safely.</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message" class="form-label required">Message / Verification Details</label>
+                        <textarea
+                            id="message"
+                            name="message"
+                            rows="4"
+                            class="form-control"
+                            placeholder="Describe how to verify ownership (e.g. stickers, case serial, where you left or found it)..."
+                            required
+                        ></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-primary btn-block">
+                        📬 Submit Safe Inquiry
+                    </button>
+                </form>
+            </div>
+
+            <!-- 2. Poster's Private Inbox -->
+            <div class="content-panel inbox-panel" id="posterInbox">
+                <div class="panel-header-with-badge">
+                    <div class="panel-title-with-icon">
+                        <span class="panel-icon-badge" aria-hidden="true">📬</span>
+                        <h2 class="panel-heading">Poster's Private Inbox</h2>
+                    </div>
+                    {% if pin_verified %}
+                        <span class="inbox-unlocked-badge">🔓 Unlocked</span>
+                    {% else %}
+                        <span class="inbox-locked-badge">🔒 Locked</span>
+                    {% endif %}
+                </div>
+
+                {% if pin_verified and unlocked_messages is not none %}
+                    <!-- Unlocked State: View Inquiries -->
+                    <div class="inbox-messages-list">
+                        {% if unlocked_messages %}
+                            <p class="inbox-count-text">Received <strong>{{ unlocked_messages|length }}</strong> inquiry message(s):</p>
+                            {% for msg in unlocked_messages %}
+                                <div class="inbox-message-card">
+                                    <div class="msg-header">
+                                        <strong class="msg-sender">{{ msg.sender_name }}</strong>
+                                        <span class="msg-time">{{ msg.created_at }}</span>
+                                    </div>
+                                    <div class="msg-contact">
+                                        <span class="contact-label">Reply to:</span>
+                                        <span class="contact-val">{{ msg.sender_contact }}</span>
+                                    </div>
+                                    <div class="msg-body">
+                                        {{ msg.message }}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="inbox-empty">
+                                <span class="empty-inbox-icon" aria-hidden="true">📬</span>
+                                <p>No inquiries have been submitted for this item yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <!-- Locked State: Prompt for PIN -->
+                    <p class="panel-subtext">
+                        Are you <strong>{{ item.poster_name }}</strong>? Enter your Security PIN to unlock and read messages sent to you regarding this item.
+                    </p>
+
+                    {% if item.is_demo %}
+                        <div class="demo-pin-hint">
+                            💡 <strong>Hackathon Demo Note:</strong> You can test the inbox with demo PIN: <code>1234</code>.
+                        </div>
+                    {% endif %}
+
+                    <form action="{{ url_for('view_inbox', item_id=item.id) }}" method="POST" class="inbox-unlock-form">
+                        <div class="form-group">
+                            <label for="inboxPin" class="form-label required">Poster Security PIN</label>
+                            <div class="pin-input-wrap">
+                                <input
+                                    type="password"
+                                    id="inboxPin"
+                                    name="pin"
+                                    class="form-control pin-input"
+                                    placeholder="Enter 4-to-8 digit PIN"
+                                    pattern="[0-9]{4,8}"
+                                    inputmode="numeric"
+                                    maxlength="8"
+                                    required
+                                >
+                                <button type="button" class="btn-pin-toggle" onclick="togglePin('inboxPin')" aria-label="Toggle PIN visibility">👁️</button>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-secondary btn-block">
+                            🔓 Unlock &amp; View Messages
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

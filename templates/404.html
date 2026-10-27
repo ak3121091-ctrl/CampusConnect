@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Page Not Found - CampusConnect{% endblock %}
+
+{% block content %}
+<div class="empty-state-global" style="margin: 5rem auto; max-width: 620px; padding: 3rem 2rem;">
+    <div class="empty-icon" aria-hidden="true">🏛️</div>
+    <span class="detail-badge-pill" style="margin: 0.5rem auto 1rem; display: inline-block;">404 ERROR</span>
+    <h1 class="empty-title">Item or Page Not Found</h1>
+    <p class="empty-desc">
+        The campus record, item listing, or resource you are trying to reach does not exist, has been removed, or was marked resolved by its poster.
+    </p>
+    <div class="empty-actions" style="margin-top: 2rem;">
+        <a href="{{ url_for('index') }}" class="btn-primary">
+            <span class="btn-icon">📁</span> Return to Campus Directory
+        </a>
+        <a href="{{ url_for('submit_item') }}" class="btn-secondary">
+            <span class="btn-icon">➕</span> Report an Item
+        </a>
+    </div>
+</div>
+{% endblock %}

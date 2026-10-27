@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CampusConnect - University Lost & Found Portal{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Top Collegiate Navigation Bar -->
+    <header class="navbar" id="siteNavbar">
+        <div class="nav-container">
+            <a href="{{ url_for('index') }}" class="nav-brand" aria-label="CampusConnect Home">
+                <span class="brand-crest" aria-hidden="true">
+                    <span class="crest-icon">🏛️</span>
+                </span>
+                <div class="brand-text">
+                    <span class="brand-name">Campus<span class="brand-accent">Connect</span></span>
+                    <span class="brand-tagline">University Lost &amp; Found Portal</span>
+                </div>
+            </a>
+
+            <!-- Mobile Hamburger Button -->
+            <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="navMenu">
+                <span class="hamburger-bar"></span>
+                <span class="hamburger-bar"></span>
+                <span class="hamburger-bar"></span>
+            </button>
+
+            <!-- Navigation Links -->
+            <nav class="nav-menu" id="navMenu">
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                    <span class="nav-link-icon">📁</span> Directory
+                </a>
+                <a href="{{ url_for('about') }}" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">
+                    <span class="nav-link-icon">📖</span> Guide &amp; Demo
+                </a>
+                <a href="{{ url_for('submit_item') }}" class="nav-btn-primary">
+                    <span class="btn-icon">➕</span> Report an Item
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Flash Messages Container -->
+    <div class="flash-wrapper" id="flashWrapper">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-alert flash-{{ category }}" role="alert">
+                            <span class="flash-icon" aria-hidden="true">
+                                {% if category == 'error' %}⚠️
+                                {% elif category == 'success' %}✨
+                                {% elif category == 'info' %}ℹ️
+                                {% else %}🔔{% endif %}
+                            </span>
+                            <div class="flash-content">
+                                <strong class="flash-title">
+                                    {% if category == 'error' %}Action Required
+                                    {% elif category == 'success' %}Success
+                                    {% elif category == 'info' %}Notice
+                                    {% else %}Notification{% endif %}
+                                </strong>
+                                <span class="flash-text">{{ message }}</span>
+                            </div>
+                            <button class="flash-close" onclick="this.closest('.flash-alert').remove()" aria-label="Dismiss alert">&times;</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="mainContent">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-left">
+                <div class="footer-brand">
+                    <span class="brand-crest-sm">🏛️</span>
+                    <span class="footer-brand-title">Campus<strong>Connect</strong></span>
+                    <span class="footer-status-pill">● System Online</span>
+                </div>
+                <p class="footer-description">
+                    Safe, privacy-first university lost-and-found registry. Reconnecting students, faculty, and campus staff with their misplaced belongings.
+                </p>
+                <div class="footer-badges-list">
+                    <span class="trust-badge">🔒 Privacy Protected Inquiries</span>
+                    <span class="trust-badge">🛡️ PIN-Hashed Ownership</span>
+                    <span class="trust-badge">⚡ Zero-Cost Local Stack</span>
+                </div>
+            </div>
+            <div class="footer-right">
+                <div class="footer-card">
+                    <div class="footer-card-header">
+                        <span class="demo-pill">DEMO DATA ACTIVE</span>
+                    </div>
+                    <p class="footer-hint">Judge Evaluation PIN for sample items: <code class="gold-code">1234</code></p>
+                    <p class="footer-meta">
+                        Engineered with Python Flask &amp; SQLite. Zero external paid APIs, telemetry, or subscriptions.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="footer-sub-bottom">
+            <p>&copy; 2026 CampusConnect &bull; University Community Lost &amp; Found System</p>
+        </div>
+    </footer>
+
+    <!-- Vanilla JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<article class="item-card {% if item.status == 'resolved' %}card-resolved{% endif %}">
+    <div class="card-header">
+        <div class="badge-cluster">
+            <!-- Lost or Found Pill -->
+            {% if item.item_type == 'lost' %}
+                <span class="pill-badge pill-lost">🔍 LOST</span>
+            {% else %}
+                <span class="pill-badge pill-found">🎁 FOUND</span>
+            {% endif %}
+
+            <!-- Open or Resolved Status -->
+            {% if item.status == 'resolved' %}
+                <span class="pill-badge pill-status-resolved">✔️ RESOLVED</span>
+            {% else %}
+                <span class="pill-badge pill-status-open">🟢 OPEN</span>
+            {% endif %}
+
+            <!-- Clearly Labelled Demo Data -->
+            {% if item.is_demo %}
+                <span class="pill-badge pill-demo" title="Sample demonstration record">DEMO DATA</span>
+            {% endif %}
+        </div>
+        
+        <span class="card-category-tag">
+            {% if item.category == 'Electronics' %}💻
+            {% elif item.category == 'Student IDs & Keys' %}🔑
+            {% elif item.category == 'Books & Stationery' %}📚
+            {% elif item.category == 'Bags & Backpacks' %}🎒
+            {% elif item.category == 'Clothing & Accessories' %}👕
+            {% else %}📦{% endif %}
+            {{ item.category }}
+        </span>
+    </div>
+
+    <div class="card-body">
+        <h3 class="card-title">
+            <a href="{{ url_for('item_detail', item_id=item.id) }}">
+                {{ item.title }}
+            </a>
+        </h3>
+
+        <div class="card-meta">
+            <div class="meta-row">
+                <span class="meta-icon" aria-hidden="true">📍</span>
+                <span class="meta-text" title="{{ item.location }}"><strong>Location:</strong> {{ item.location }}</span>
+            </div>
+            <div class="meta-row">
+                <span class="meta-icon" aria-hidden="true">📅</span>
+                <span class="meta-text"><strong>Date:</strong> {{ item.event_date }}</span>
+            </div>
+        </div>
+
+        <p class="card-description">
+            {{ item.description }}
+        </p>
+    </div>
+
+    <div class="card-footer">
+        <span class="card-posted-by">Reported by: <strong>{{ item.poster_name }}</strong></span>
+        <a href="{{ url_for('item_detail', item_id=item.id) }}" class="card-action-btn" aria-label="View details for {{ item.title }}">
+            View Details &rarr;
+        </a>
+    </div>
+</article>

@@ -1,0 +1,363 @@
+{% extends 'base.html' %}
+
+{% block title %}CampusConnect - University Lost & Found Directory{% endblock %}
+
+{% block content %}
+<div class="index-container">
+
+    <!-- Hero Section with Live Stats -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <div class="hero-tag-wrap">
+                <span class="hero-badge">🏛️ Campus Lost &amp; Found Portal</span>
+                <span class="hero-live-pulse"><span class="pulse-dot"></span> Live Campus Network</span>
+            </div>
+            <h1 class="hero-title">Reuniting Campus Possessions with Speed &amp; Privacy</h1>
+            <p class="hero-subtitle">
+                A verified directory for students, faculty, and campus staff. Report missing belongings, search campus buildings, and safely connect with finders with zero public contact exposure.
+            </p>
+
+            <!-- Quick Action CTA -->
+            <div class="hero-cta-group">
+                <a href="{{ url_for('submit_item') }}" class="btn-hero-primary">
+                    <span class="btn-icon">➕</span> Report an Item Now
+                </a>
+                <a href="#discoveryRail" class="btn-hero-secondary">
+                    <span class="btn-icon">⚡</span> View Discovery Rail
+                </a>
+                <a href="#searchSection" class="btn-hero-ghost">
+                    <span class="btn-icon">🔍</span> Search Directory
+                </a>
+            </div>
+
+            <!-- Collegiate Stats Bar -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon-wrap stat-icon-total">📊</div>
+                    <div class="stat-details">
+                        <span class="stat-number">{{ stats.total }}</span>
+                        <span class="stat-label">Total Reported</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-lost">
+                    <div class="stat-icon-wrap stat-icon-lost">🔍</div>
+                    <div class="stat-details">
+                        <span class="stat-number">{{ stats.open_lost }}</span>
+                        <span class="stat-label">Open Lost Items</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-found">
+                    <div class="stat-icon-wrap stat-icon-found">🎁</div>
+                    <div class="stat-details">
+                        <span class="stat-number">{{ stats.open_found }}</span>
+                        <span class="stat-label">Open Found Items</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-resolved">
+                    <div class="stat-icon-wrap stat-icon-resolved">✔️</div>
+                    <div class="stat-details">
+                        <span class="stat-number">{{ stats.resolved }}</span>
+                        <span class="stat-label">Reunited / Resolved</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- INTERACTIVE CAMPUS DISCOVERY RAIL (Inspired by ClothingRailHero)       -->
+    <!-- Horizontal sliding showcase of recently reported campus items        -->
+    <!-- ===================================================================== -->
+    <section class="discovery-rail-section" id="discoveryRail" aria-label="Recent Items Showcase Rail">
+        <div class="rail-header">
+            <div class="rail-title-group">
+                <div class="rail-pill-badge">
+                    <span class="rail-spark">✨</span> Interactive Showcase
+                </div>
+                <h2 class="rail-heading">Recent Campus Items Rail</h2>
+                <p class="rail-subheading">
+                    Glide through recently reported items across university buildings. Hover or drag to inspect items in 3D.
+                </p>
+            </div>
+
+            <!-- Rail Navigation Buttons -->
+            <div class="rail-controls">
+                <span class="rail-hint-text">Drag or use arrows to slide</span>
+                <button type="button" class="rail-nav-btn" id="railPrevBtn" aria-label="Scroll rail left">
+                    &larr;
+                </button>
+                <button type="button" class="rail-nav-btn" id="railNextBtn" aria-label="Scroll rail right">
+                    &rarr;
+                </button>
+            </div>
+        </div>
+
+        <!-- The Physical Rail Track Beam -->
+        <div class="rail-beam-wrapper">
+            <div class="rail-track-beam" aria-hidden="true">
+                <div class="beam-anchor-left"></div>
+                <div class="beam-line"></div>
+                <div class="beam-anchor-right"></div>
+            </div>
+
+            <!-- Horizontal Scroll Viewport -->
+            <div class="rail-viewport" id="railViewport" tabindex="0" role="region" aria-label="Scrollable items rail">
+                <div class="rail-track" id="railTrack">
+                    {% for item in rail_items %}
+                        <div class="rail-card-wrapper" data-index="{{ loop.index0 }}">
+                            <!-- Suspension Peg / Hanger Connector -->
+                            <div class="card-suspension-peg" aria-hidden="true">
+                                <span class="peg-ring"></span>
+                                <span class="peg-thread"></span>
+                            </div>
+
+                            <!-- 3D Perspective Card -->
+                            <article class="rail-card {% if item.status == 'resolved' %}card-resolved{% endif %}" tabindex="0">
+                                <div class="rail-card-top">
+                                    <div class="rail-type-pill {% if item.item_type == 'lost' %}pill-lost{% else %}pill-found{% endif %}">
+                                        {% if item.item_type == 'lost' %}🔍 LOST{% else %}🎁 FOUND{% endif %}
+                                    </div>
+                                    <span class="rail-category-tag">
+                                        {% if item.category == 'Electronics' %}💻
+                                        {% elif item.category == 'Student IDs & Keys' %}🔑
+                                        {% elif item.category == 'Books & Stationery' %}📚
+                                        {% elif item.category == 'Bags & Backpacks' %}🎒
+                                        {% elif item.category == 'Clothing & Accessories' %}👕
+                                        {% else %}📦{% endif %}
+                                        {{ item.category }}
+                                    </span>
+                                </div>
+
+                                <h3 class="rail-card-title">
+                                    <a href="{{ url_for('item_detail', item_id=item.id) }}">
+                                        {{ item.title }}
+                                    </a>
+                                </h3>
+
+                                <div class="rail-card-meta">
+                                    <div class="meta-row">
+                                        <span class="meta-icon" aria-hidden="true">📍</span>
+                                        <span class="meta-text" title="{{ item.location }}">{{ item.location }}</span>
+                                    </div>
+                                    <div class="meta-row">
+                                        <span class="meta-icon" aria-hidden="true">📅</span>
+                                        <span class="meta-text">{{ item.event_date }}</span>
+                                    </div>
+                                </div>
+
+                                <div class="rail-card-footer">
+                                    {% if item.status == 'resolved' %}
+                                        <span class="status-indicator-resolved">✔️ Reunited</span>
+                                    {% else %}
+                                        <span class="status-indicator-open">🟢 Active Case</span>
+                                    {% endif %}
+                                    
+                                    <a href="{{ url_for('item_detail', item_id=item.id) }}" class="rail-inspect-btn">
+                                        Inspect &rarr;
+                                    </a>
+                                </div>
+                            </article>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SEARCH & FILTERS BAR                                                  -->
+    <!-- ===================================================================== -->
+    <section class="filter-panel" id="searchSection" aria-label="Search and filter items">
+        <form action="{{ url_for('index') }}" method="GET" class="filter-form" id="filterForm">
+            <!-- Search Keyword Input Group -->
+            <div class="search-input-group">
+                <span class="search-icon" aria-hidden="true">🔍</span>
+                <input
+                    type="text"
+                    name="q"
+                    class="search-input"
+                    placeholder="Search by keyword, building, classroom, brand, or model (e.g. calculator, keys, hydro flask, backpack)..."
+                    value="{{ current_search }}"
+                    aria-label="Search items by keyword"
+                >
+                {% if current_search %}
+                    <a href="{{ url_for('index') }}" class="search-clear-btn" title="Clear search" aria-label="Clear search input">&times;</a>
+                {% endif %}
+                <button type="submit" class="search-submit-btn">Search</button>
+            </div>
+
+            <!-- Filter Controls Row -->
+            <div class="filters-row">
+                <!-- Type Filter Tabs (All / Lost / Found) -->
+                <div class="filter-type-tabs" role="tablist" aria-label="Filter by item type">
+                    <input type="hidden" name="type" id="itemTypeInput" value="{{ current_type }}">
+                    
+                    <button type="button"
+                            class="type-tab-btn {% if current_type == 'all' or not current_type %}active{% endif %}"
+                            data-type="all"
+                            role="tab"
+                            aria-selected="{% if current_type == 'all' or not current_type %}true{% else %}false{% endif %}">
+                        All Items ({{ total_count }})
+                    </button>
+                    <button type="button"
+                            class="type-tab-btn tab-lost {% if current_type == 'lost' %}active{% endif %}"
+                            data-type="lost"
+                            role="tab"
+                            aria-selected="{% if current_type == 'lost' %}true{% else %}false{% endif %}">
+                        🔍 Lost Items ({{ lost_count }})
+                    </button>
+                    <button type="button"
+                            class="type-tab-btn tab-found {% if current_type == 'found' %}active{% endif %}"
+                            data-type="found"
+                            role="tab"
+                            aria-selected="{% if current_type == 'found' %}true{% else %}false{% endif %}">
+                        🎁 Found Items ({{ found_count }})
+                    </button>
+                </div>
+
+                <!-- Dropdown Filters (Category & Status) -->
+                <div class="filter-selects">
+                    <div class="select-wrapper">
+                        <label for="categorySelect" class="sr-only">Category</label>
+                        <select name="category" id="categorySelect" class="filter-select" onchange="this.form.submit()">
+                            <option value="All" {% if current_category == 'All' or not current_category %}selected{% endif %}>
+                                🏷️ All Categories
+                            </option>
+                            {% for cat in categories %}
+                                <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>
+                                    {{ cat }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="select-wrapper">
+                        <label for="statusSelect" class="sr-only">Status</label>
+                        <select name="status" id="statusSelect" class="filter-select" onchange="this.form.submit()">
+                            <option value="all" {% if current_status == 'all' or not current_status %}selected{% endif %}>
+                                ⚡ All Statuses
+                            </option>
+                            <option value="open" {% if current_status == 'open' %}selected{% endif %}>
+                                🟢 Open Cases Only
+                            </option>
+                            <option value="resolved" {% if current_status == 'resolved' %}selected{% endif %}>
+                                ✔️ Resolved Only
+                            </option>
+                        </select>
+                    </div>
+
+                    {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
+                        <a href="{{ url_for('index') }}" class="filter-reset-link" title="Clear all active filters">↺ Reset</a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <!-- Active Filters Summary Banner -->
+    {% if current_search or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
+        <div class="active-filter-banner" role="status">
+            <span class="active-filter-lead">Active filters:</span>
+            {% if current_search %}
+                <span class="filter-tag">Query: "{{ current_search }}"</span>
+            {% endif %}
+            {% if current_category and current_category != 'All' %}
+                <span class="filter-tag">Category: {{ current_category }}</span>
+            {% endif %}
+            {% if current_status and current_status != 'all' %}
+                <span class="filter-tag">Status: {{ current_status|capitalize }}</span>
+            {% endif %}
+            <a href="{{ url_for('index') }}" class="clear-all-link">Clear all</a>
+        </div>
+    {% endif %}
+
+    <!-- Items Display Area -->
+    <div class="items-sections-wrapper">
+
+        <!-- SECTION 1: Lost Items Section -->
+        {% if current_type == 'all' or current_type == 'lost' %}
+            <section class="item-group-section lost-section" id="lostItemsSection">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <span class="section-icon lost-icon-bg" aria-hidden="true">🔍</span>
+                        <div>
+                            <h2 class="section-heading">Lost Items</h2>
+                            <p class="section-subtext">Belongings reported missing across campus by students and community members.</p>
+                        </div>
+                        <span class="section-count-badge lost-badge">{{ lost_items|length }}</span>
+                    </div>
+                </div>
+
+                {% if lost_items %}
+                    <div class="cards-grid">
+                        {% for item in lost_items %}
+                            {% include '_item_card.html' %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon" aria-hidden="true">🔎</div>
+                        <h3 class="empty-title">No lost items match your current filter</h3>
+                        <p class="empty-desc">Try clearing your search terms or report an item you lost.</p>
+                        <a href="{{ url_for('submit_item') }}" class="btn-secondary">Report a Lost Item</a>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <!-- Visual Divider if viewing both sections -->
+        {% if current_type == 'all' and lost_items and found_items %}
+            <div class="section-divider-wrap" aria-hidden="true">
+                <hr class="section-divider">
+                <span class="divider-crest">🏛️</span>
+            </div>
+        {% endif %}
+
+        <!-- SECTION 2: Found Items Section -->
+        {% if current_type == 'all' or current_type == 'found' %}
+            <section class="item-group-section found-section" id="foundItemsSection">
+                <div class="section-header">
+                    <div class="section-title-wrap">
+                        <span class="section-icon found-icon-bg" aria-hidden="true">🎁</span>
+                        <div>
+                            <h2 class="section-heading">Found Items</h2>
+                            <p class="section-subtext">Items turned in to campus desks or waiting to be safely claimed by their owners.</p>
+                        </div>
+                        <span class="section-count-badge found-badge">{{ found_items|length }}</span>
+                    </div>
+                </div>
+
+                {% if found_items %}
+                    <div class="cards-grid">
+                        {% for item in found_items %}
+                            {% include '_item_card.html' %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon" aria-hidden="true">📦</div>
+                        <h3 class="empty-title">No found items match your current filter</h3>
+                        <p class="empty-desc">Did you spot or turn in something on campus? Help reunite it with its owner!</p>
+                        <a href="{{ url_for('submit_item') }}" class="btn-primary">Report a Found Item</a>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <!-- Global Empty State if total items is 0 -->
+        {% if not items %}
+            <div class="empty-state-global">
+                <div class="empty-icon" aria-hidden="true">📭</div>
+                <h2 class="empty-title">No Items Found</h2>
+                <p class="empty-desc">We couldn't find any campus records matching your current search criteria.</p>
+                <div class="empty-actions">
+                    <a href="{{ url_for('index') }}" class="btn-secondary">Reset All Filters</a>
+                    <a href="{{ url_for('submit_item') }}" class="btn-primary">Post a New Item</a>
+                </div>
+            </div>
+        {% endif %}
+
+    </div>
+
+</div>
+{% endblock %}
