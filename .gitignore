@@ -45,3 +45,7 @@ venv.bak/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Database backups & test databases
+campusconnect_backup_*.db
+campusconnect_test.db

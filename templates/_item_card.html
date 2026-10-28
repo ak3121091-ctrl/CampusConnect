@@ -14,11 +14,6 @@
             {% else %}
                 <span class="pill-badge pill-status-open">🟢 OPEN</span>
             {% endif %}
-
-            <!-- Clearly Labelled Demo Data -->
-            {% if item.is_demo %}
-                <span class="pill-badge pill-demo" title="Sample demonstration record">DEMO DATA</span>
-            {% endif %}
         </div>
         
         <span class="card-category-tag">
@@ -35,18 +30,18 @@
     <div class="card-body">
         <h3 class="card-title">
             <a href="{{ url_for('item_detail', item_id=item.id) }}">
-                {{ item.title }}
+                {{ item.title.replace('[DEMO DATA]', '').strip() }}
             </a>
         </h3>
 
         <div class="card-meta">
             <div class="meta-row">
                 <span class="meta-icon" aria-hidden="true">📍</span>
-                <span class="meta-text" title="{{ item.location }}"><strong>Location:</strong> {{ item.location }}</span>
+                <span class="meta-text" title="{{ item.location }}">{{ item.location }}</span>
             </div>
             <div class="meta-row">
                 <span class="meta-icon" aria-hidden="true">📅</span>
-                <span class="meta-text"><strong>Date:</strong> {{ item.event_date }}</span>
+                <span class="meta-text">{{ item.event_date }}</span>
             </div>
         </div>
 
@@ -56,8 +51,8 @@
     </div>
 
     <div class="card-footer">
-        <span class="card-posted-by">Reported by: <strong>{{ item.poster_name }}</strong></span>
-        <a href="{{ url_for('item_detail', item_id=item.id) }}" class="card-action-btn" aria-label="View details for {{ item.title }}">
+        <span class="card-posted-by">By <strong>{{ item.poster_name }}</strong></span>
+        <a href="{{ url_for('item_detail', item_id=item.id) }}" class="card-action-btn" aria-label="View details for {{ item.title.replace('[DEMO DATA]', '').strip() }}">
             View Details &rarr;
         </a>
     </div>

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title %}Server Error - CampusConnect{% endblock %}
+
+{% block content %}
+<div class="empty-state-global" style="margin: 4rem auto; max-width: 540px; padding: 2.5rem 1.5rem;">
+    <div class="empty-icon" aria-hidden="true">⚠️</div>
+    <span class="pill-badge pill-lost" style="margin: 0.5rem auto 1rem; display: inline-block;">500 SERVER ERROR</span>
+    <h1 class="empty-title">Something Went Wrong</h1>
+    <p class="empty-desc">
+        An unexpected error occurred while processing your request. Please return to the directory or try again.
+    </p>
+    <div class="empty-actions" style="margin-top: 1.5rem;">
+        <a href="{{ url_for('index') }}" class="btn-primary">
+            Back to Directory
+        </a>
+        <a href="{{ url_for('submit_item') }}" class="btn-secondary">
+            Report Item
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -7,27 +7,27 @@
     <div class="form-card">
         <div class="form-header">
             <div class="form-header-badge-wrap">
-                <span class="form-header-badge">🏛️ Campus Official Report</span>
-                <span class="form-live-shield">🔒 Private &amp; Encrypted</span>
+                <span class="form-header-badge">🏛️ Campus Report</span>
+                <span class="form-live-shield">🔒 Secure</span>
             </div>
-            <h1 class="form-title">Report a Lost or Found Campus Item</h1>
+            <h1 class="form-title">Report an Item</h1>
             <p class="form-subtitle">
-                Provide identifying details to help campus security and fellow students reunite this item with its rightful owner.
+                Provide details to help reunite this item with its owner.
             </p>
         </div>
 
         <form action="{{ url_for('submit_item') }}" method="POST" class="item-form" novalidate>
             <!-- 1. Report Type Selection -->
             <div class="form-section">
-                <label class="form-label required">What type of case are you reporting?</label>
+                <label class="form-label required">Item Type</label>
                 <div class="type-selector-group" role="radiogroup" aria-label="Item Type">
                     <label class="type-radio-card type-lost-card {% if form_data.get('item_type') == 'lost' or not form_data.get('item_type') %}selected{% endif %}">
                         <input type="radio" name="item_type" value="lost" {% if form_data.get('item_type') == 'lost' or not form_data.get('item_type') %}checked{% endif %} required>
                         <div class="radio-content">
                             <span class="radio-icon" aria-hidden="true">🔍</span>
                             <div class="radio-texts">
-                                <strong class="radio-title">I Lost Something</strong>
-                                <small class="radio-desc">Report your personal missing belonging</small>
+                                <strong class="radio-title">Lost Item</strong>
+                                <small class="radio-desc">Missing belonging</small>
                             </div>
                             <span class="radio-indicator" aria-hidden="true"></span>
                         </div>
@@ -38,8 +38,8 @@
                         <div class="radio-content">
                             <span class="radio-icon" aria-hidden="true">🎁</span>
                             <div class="radio-texts">
-                                <strong class="radio-title">I Found Something</strong>
-                                <small class="radio-desc">Turned in or spotted on campus</small>
+                                <strong class="radio-title">Found Item</strong>
+                                <small class="radio-desc">Found on campus</small>
                             </div>
                             <span class="radio-indicator" aria-hidden="true"></span>
                         </div>
@@ -51,22 +51,22 @@
             <div class="form-section">
                 <div class="section-title-bar">
                     <span class="section-number">1</span>
-                    <h2 class="section-heading-sm">Item Details &amp; Location</h2>
+                    <h2 class="section-heading-sm">Item Details</h2>
                 </div>
 
                 <div class="form-group">
-                    <label for="title" class="form-label required">Item Title / Headline</label>
+                    <label for="title" class="form-label required">Item Title</label>
                     <input
                         type="text"
                         id="title"
                         name="title"
                         class="form-control"
-                        placeholder="e.g., TI-84 Plus CE Graphing Calculator, Midnight Blue Hydro Flask, Lenovo ThinkPad"
+                        placeholder="e.g. TI-84 Calculator, Blue Hydro Flask"
                         value="{{ form_data.get('title', '') }}"
                         required
                         maxlength="100"
                     >
-                    <span class="form-help">Clear headline including brand, model, or primary color.</span>
+                    <span class="form-help">Include brand, model, or distinguishing features.</span>
                 </div>
 
                 <div class="form-row-2">
@@ -83,7 +83,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="event_date" class="form-label required">Date Lost or Found</label>
+                        <label for="event_date" class="form-label required">Date</label>
                         <input
                             type="date"
                             id="event_date"
@@ -97,31 +97,32 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="location" class="form-label required">Campus Location</label>
+                    <label for="location" class="form-label required">Location</label>
                     <input
                         type="text"
                         id="location"
                         name="location"
                         class="form-control"
-                        placeholder="e.g., Science & Engineering Hall - Room 302, University Dining Commons, Library 2nd Floor"
+                        placeholder="e.g. Science Hall 302, Library 2nd Floor"
                         value="{{ form_data.get('location', '') }}"
                         required
                         maxlength="120"
                     >
-                    <span class="form-help">Specify campus building, room number, or prominent landmark.</span>
+                    <span class="form-help">Building, room, or landmark.</span>
                 </div>
 
                 <div class="form-group">
-                    <label for="description" class="form-label required">Detailed Description</label>
+                    <label for="description" class="form-label required">Description</label>
                     <textarea
                         id="description"
                         name="description"
                         rows="4"
                         class="form-control"
-                        placeholder="Describe stickers, scratches, case color, brand markings, or contents inside..."
+                        placeholder="Color, stickers, marks, or contents..."
+                        maxlength="2000"
                         required
                     >{{ form_data.get('description', '') }}</textarea>
-                    <span class="form-help">Tip: Keep secret verification details (like phone passcode or serial) private so only the true owner can prove ownership.</span>
+                    <span class="form-help">Tip: Keep unique identifiers (e.g. passcode or serial) private to verify ownership later.</span>
                 </div>
             </div>
 
@@ -130,51 +131,52 @@
                 <div class="section-title-bar">
                     <span class="section-number">2</span>
                     <div>
-                        <h2 class="section-heading-sm">Poster Identity &amp; Secret PIN</h2>
-                        <span class="privacy-badge">🔒 Privacy &amp; Authorization Protection</span>
+                        <h2 class="section-heading-sm">Contact &amp; Security PIN</h2>
+                        <span class="privacy-badge">🔒 Private</span>
                     </div>
                 </div>
 
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="poster_name" class="form-label required">Your Name / Display Alias</label>
+                        <label for="poster_name" class="form-label required">Your Name</label>
                         <input
                             type="text"
                             id="poster_name"
                             name="poster_name"
                             class="form-control"
-                            placeholder="e.g., Alex Chen, Campus Transit Dispatch"
+                            placeholder="e.g. Alex Chen"
                             value="{{ form_data.get('poster_name', '') }}"
                             required
                             maxlength="60"
                         >
-                        <span class="form-help">Visible publicly on the item card.</span>
+                        <span class="form-help">Visible on item listing.</span>
                     </div>
 
                     <div class="form-group">
-                        <label for="poster_contact" class="form-label required">Private Contact (Campus Email or Phone)</label>
+                        <label for="poster_contact" class="form-label required">Contact (Email or Phone)</label>
                         <input
                             type="text"
                             id="poster_contact"
                             name="poster_contact"
                             class="form-control"
-                            placeholder="e.g., alex.chen@campus.edu or (555) 012-3456"
+                            placeholder="e.g. alex@campus.edu or (555) 012-3456"
                             value="{{ form_data.get('poster_contact', '') }}"
+                            maxlength="100"
                             required
                         >
-                        <span class="form-help"><strong>🔒 Protected:</strong> Stored securely in SQLite; never displayed publicly to visitors.</span>
+                        <span class="form-help"><strong>🔒 Protected:</strong> Never displayed publicly. Used for inquiry delivery.</span>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="pin" class="form-label required">Create a 4-to-8 Digit Security PIN</label>
+                    <label for="pin" class="form-label required">Security PIN (4–8 digits)</label>
                     <div class="pin-input-wrap">
                         <input
                             type="password"
                             id="pin"
                             name="pin"
                             class="form-control pin-input"
-                            placeholder="e.g. 1234 or 9876"
+                            placeholder="4 to 8 digits"
                             value="{{ form_data.get('pin', '') }}"
                             pattern="[0-9]{4,8}"
                             inputmode="numeric"
@@ -184,7 +186,7 @@
                         <button type="button" class="btn-pin-toggle" onclick="togglePin('pin')" aria-label="Toggle PIN visibility">👁️</button>
                     </div>
                     <span class="form-help">
-                        <strong>Important:</strong> You will use this PIN to mark this item as resolved or unlock your private inquiry inbox.
+                        Required to resolve item or view private inquiries.
                     </span>
                 </div>
             </div>
@@ -193,7 +195,7 @@
             <div class="form-actions">
                 <a href="{{ url_for('index') }}" class="btn-cancel">Cancel</a>
                 <button type="submit" class="btn-primary btn-submit">
-                    <span class="btn-icon">🚀</span> Publish Item to CampusConnect
+                    <span class="btn-icon">✓</span> Submit Report
                 </button>
             </div>
         </form>

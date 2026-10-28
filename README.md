@@ -11,7 +11,7 @@ A privacy-focused, lightweight, and modern campus Lost & Found web application b
    - Physics-based momentum drag-to-scroll, arrow navigation, keyboard controls, and 3D card tilt on hover.
 2. **Responsive Home Page & Search Bar:**
    - Instant search across item titles, locations, descriptions, categories, and poster aliases.
-   - Quick statistics dashboard (Total Items, Open Lost, Open Found, Reunited).
+   - Dynamic statistics dashboard (Total Reports, Open Lost, Open Found, Resolved).
 3. **Separate Lost & Found Sections:**
    - Distinct sections on the home page for **Lost Items** and **Found Items**.
    - Tab toggles: *All Items*, *Lost Items*, *Found Items*.
@@ -20,23 +20,22 @@ A privacy-focused, lightweight, and modern campus Lost & Found web application b
    - Filter by Status (*All*, *Open Only*, *Resolved Only*).
 5. **Rich Information Cards:**
    - Highlights item title, category, campus building/location, date, and status badges.
-   - Clear visual pill badges: `LOST`, `FOUND`, `OPEN`, `RESOLVED`, and `DEMO DATA`.
-5. **Item Submission Form:**
+   - Clear visual pill badges: `LOST`, `FOUND`, `OPEN`, and `RESOLVED`.
+6. **Item Submission Form:**
    - Fast reporting for lost or found belongings.
-   - Server-side validation ensuring valid inputs and clean data.
-6. **Safe Contact & Inquiry Interface:**
+   - Client and server-side validation ensuring valid inputs and clean data.
+7. **Safe Contact & Inquiry Interface:**
    - **Zero Public Exposure:** Student email addresses and phone numbers are never printed on public web pages.
    - Anyone who finds an item or wants to claim it submits a secure inquiry message stored directly inside the SQLite database.
-   - The message is kept safe without making false claims about third-party email/SMS delivery.
-7. **PIN-Protected Authorization:**
-   - When posting an item, the owner sets a 4-to-8 digit Security PIN.
+   - The message is kept safe without third-party email exposure.
+8. **PIN-Protected Authorization:**
+   - When posting an item, the reporter chooses a 4-to-8 digit Security PIN.
    - The PIN is securely hashed using `werkzeug.security` (PBKDF2/SHA256).
    - Anonymous visitors **cannot** modify or resolve items without the owner's PIN.
    - The owner can unlock and read all inquiries sent to them using their PIN.
-8. **Pre-Seeded Demo Data:**
-   - 6 realistic sample items across campus spots (Library, Science Hall, Rec Center, Bus Stop).
-   - Demo records are clearly badged `DEMO DATA`.
-   - Demo PIN for testing: `1234`.
+9. **Zero Demo Clutter & Safe Database Tooling:**
+   - Built to receive genuine campus reports directly.
+   - Includes `manage_db.py` for automated atomic backups, table initialization, and safe database maintenance.
 
 ---
 
@@ -83,6 +82,7 @@ All tests execute parameterized SQL checks, form validation, PIN hashing, status
 
 - **`app.py`**: The main Flask server containing all route handlers (`/`, `/items/new`, `/items/<id>`, `/items/<id>/status`, `/items/<id>/inbox`, `/about`), server-side validation, and security checks.
 - **`database.py`**: Manages the SQLite database connection, table creation, demo seeding, and parameterized queries using Python's standard `sqlite3` library.
+- **`manage_db.py`**: CLI tool for safe database backups, cleaning demo data, and checking live table status.
 - **`campusconnect.db`**: The SQLite database file created automatically on initial run.
 - **`templates/`**:
   - **`base.html`**: Shared layout with navigation, brand icon, flash alerts, and footer.
@@ -90,9 +90,29 @@ All tests execute parameterized SQL checks, form validation, PIN hashing, status
   - **`_item_card.html`**: Reusable item card component with badge cluster.
   - **`submit.html`**: Form to submit a lost or found item.
   - **`item_detail.html`**: Detailed view, safe contact inquiry form, and PIN-protected owner controls.
-  - **`about.html`**: Hackathon guide and testing instructions for judges.
+  - **`about.html`**: CampusConnect mission and workflow guide.
   - **`404.html`**: Friendly 404 page for missing records.
 - **`static/css/styles.css`**: Responsive styling, custom badge colors, and mobile-friendly layout.
 - **`static/js/main.js`**: Interactive tab filters, mobile menu toggle, and client-side PIN guards.
 - **`requirements.txt`**: Minimal requirements (`Flask>=3.0.0`, `Werkzeug>=3.0.0`).
 - **`test_app.py`**: Automated test suite verifying all routes, persistence, and security controls.
+
+---
+
+## 🛠️ Database Management Commands (`manage_db.py`)
+
+CampusConnect includes safe database management commands:
+
+```bash
+# Check current database item and inquiry counts:
+python manage_db.py status
+
+# Create an atomic timestamped backup copy:
+python manage_db.py backup
+
+# Safely back up and clean all demo records (preserves genuine reports):
+python manage_db.py clean
+
+# Reset the database to a clean, empty state ready for production:
+python manage_db.py reset-empty
+```

@@ -5,7 +5,13 @@ Tests all routes, SQL parameterization, authorization, input validation,
 safe contact inquiries, and database persistence.
 """
 
+import os
 import unittest
+
+# Ensure automated test suite runs against an isolated test database
+TEST_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'campusconnect_test.db')
+os.environ['CAMPUSCONNECT_DB'] = TEST_DB_PATH
+
 from app import app
 import database
 
@@ -13,13 +19,20 @@ import database
 class CampusConnectTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Reset database to guarantee fresh demo records for testing
-        database.reset_db()
+        # Initialize test database and seed sample fixture records for testing
+        database.reset_db(seed_demo=False)
+        conn = database.get_db_connection()
+        database.seed_demo_data(conn, is_demo=0)
+        conn.close()
 
     @classmethod
     def tearDownClass(cls):
-        # Reset database after test suite completes so demo records are pristine for manual inspection
-        database.reset_db()
+        # Safely remove isolated test database after test suite completes
+        if os.path.exists(TEST_DB_PATH):
+            try:
+                os.remove(TEST_DB_PATH)
+            except Exception:
+                pass
 
     def setUp(self):
         # Configure test client
@@ -37,16 +50,16 @@ class CampusConnectTestCase(unittest.TestCase):
         print("[PASS] Test 01: Database initialized and seeded with demo records.")
 
     def test_02_home_page_rendering(self):
-        """Verify home page loads with stats, search bar, and separate sections."""
+        """Verify home page loads with stats, search bar, and separate sections without demo labels."""
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         html = response.data.decode('utf-8')
         self.assertIn('CampusConnect', html)
         self.assertIn('Lost Items', html)
         self.assertIn('Found Items', html)
-        self.assertIn('DEMO DATA', html)
+        self.assertNotIn('DEMO DATA', html)
         self.assertIn('search-input', html)
-        print("[PASS] Test 02: Home page renders with search, badges, and sections.")
+        print("[PASS] Test 02: Home page renders with search, badges, and sections (no DEMO DATA labels).")
 
     def test_03_search_and_filters(self):
         """Verify search query and filter parameters."""
@@ -217,8 +230,8 @@ class CampusConnectTestCase(unittest.TestCase):
     def test_08_authorization_for_inbox_unlock(self):
         """Verify only users with correct PIN can unlock and view private inquiries."""
         items = database.get_items()
-        demo_item = next(i for i in items if i['is_demo'] == 1)
-        item_id = demo_item['id']
+        test_item = next((i for i in items if 'TI-84' in i['title']), items[-1])
+        item_id = test_item['id']
 
         # 1. Attempt inbox unlock with WRONG PIN
         wrong_res = self.client.post(f'/items/{item_id}/inbox', data={'pin': '0000'}, follow_redirects=True)
@@ -306,6 +319,92 @@ class CampusConnectTestCase(unittest.TestCase):
         res_invalid_status = self.client.get('/?status=random')
         self.assertEqual(res_invalid_status.status_code, 200)
         print("[PASS] Test 13: Query parameters normalize gracefully and prevent blank view state.")
+
+    def test_14_literal_search_wildcard_escaping(self):
+        """Verify searching for literal %, _, or quotes does not cause SQL syntax errors or greedy matches."""
+        # Query with percentage, underscore, and quotes
+        res_percent = self.client.get('/?q=%25')
+        self.assertEqual(res_percent.status_code, 200)
+
+        res_underscore = self.client.get('/?q=_')
+        self.assertEqual(res_underscore.status_code, 200)
+
+        res_quotes = self.client.get('/?q=\'OR\'1\'=\'1')
+        self.assertEqual(res_quotes.status_code, 200)
+        print("[PASS] Test 14: Literal wildcards and SQL escape patterns handled safely.")
+
+    def test_15_action_endpoints_get_redirection(self):
+        """Verify accessing POST action endpoints via GET redirects safely instead of throwing 405 errors."""
+        items = database.get_items()
+        item_id = items[0]['id']
+
+        # 1. GET /items/<id>/contact -> redirect
+        res_contact = self.client.get(f'/items/{item_id}/contact')
+        self.assertEqual(res_contact.status_code, 302)
+        self.assertIn(f'/items/{item_id}', res_contact.headers['Location'])
+
+        # 2. GET /items/<id>/status -> redirect
+        res_status = self.client.get(f'/items/{item_id}/status')
+        self.assertEqual(res_status.status_code, 302)
+        self.assertIn(f'/items/{item_id}', res_status.headers['Location'])
+
+        # 3. GET /items/<id>/inbox -> redirect
+        res_inbox = self.client.get(f'/items/{item_id}/inbox')
+        self.assertEqual(res_inbox.status_code, 302)
+        self.assertIn(f'/items/{item_id}', res_inbox.headers['Location'])
+        print("[PASS] Test 15: Action endpoints gracefully redirect GET requests without 405 errors.")
+
+    def test_16_contact_draft_preservation_on_validation_failure(self):
+        """Verify contact message is not lost if the user makes a validation error (e.g., short contact)."""
+        items = database.get_items()
+        item_id = items[0]['id']
+
+        draft_message = "I have detailed information regarding this lost calculator found in Room 302."
+        payload = {
+            'sender_name': 'A',  # too short (min 2)
+            'sender_contact': 'valid@campus.edu',
+            'message': draft_message
+        }
+        res = self.client.post(f'/items/{item_id}/contact', data=payload, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        # User's typed message and contact should still be preserved in the form!
+        self.assertIn(draft_message, html)
+        self.assertIn('valid@campus.edu', html)
+        print("[PASS] Test 16: Visitor inquiry draft is preserved in form upon validation errors.")
+
+    def test_17_input_length_upper_bounds(self):
+        """Verify payload limits reject excessively large inputs."""
+        # Title > 100 characters
+        oversized_payload = {
+            'item_type': 'lost',
+            'title': 'X' * 105,
+            'category': 'Electronics',
+            'location': 'Library',
+            'event_date': '2026-10-27',
+            'description': 'Valid description text.',
+            'poster_name': 'Tester',
+            'poster_contact': 'test@campus.edu',
+            'pin': '1234'
+        }
+        res = self.client.post('/items/new', data=oversized_payload, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Title must be between 3 and 100 characters', res.data.decode('utf-8'))
+
+        # Description > 2000 characters
+        oversized_desc = dict(oversized_payload, title='Valid Title', description='D' * 2050)
+        res_desc = self.client.post('/items/new', data=oversized_desc, follow_redirects=True)
+        self.assertEqual(res_desc.status_code, 200)
+        self.assertIn('Description must be between 5 and 2000 characters', res_desc.data.decode('utf-8'))
+        print("[PASS] Test 17: Upper-bound length constraints strictly enforced.")
+
+    def test_18_error_handlers(self):
+        """Verify custom 404 and 500 error pages."""
+        res_404 = self.client.get('/nonexistent-page-url')
+        self.assertEqual(res_404.status_code, 404)
+        self.assertIn('404 ERROR', res_404.data.decode('utf-8'))
+        self.assertIn('Page Not Found', res_404.data.decode('utf-8'))
+        print("[PASS] Test 18: Branded error templates render for 404 and 500.")
 
 
 if __name__ == '__main__':

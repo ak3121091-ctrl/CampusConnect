@@ -10,16 +10,17 @@ sqlite3 database.
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, abort
+    url_for, flash, abort, session
 )
 from werkzeug.security import check_password_hash
 import re
+import os
 import datetime
 import database
 
 app = Flask(__name__)
-# Standard secret key for session flash messages
-app.secret_key = 'campusconnect-hackathon-local-secret-key-2026'
+# Secret key from environment variable with secure fallback for local dev
+app.secret_key = os.environ.get('SECRET_KEY') or os.environ.get('FLASK_SECRET_KEY') or 'campusconnect-dev-key-change-in-production-2026'
 
 CATEGORIES = [
     'Electronics',
@@ -31,9 +32,9 @@ CATEGORIES = [
 ]
 
 
-# Ensure tables are ready on startup
+# Ensure tables are ready on startup (clean initialization, no demo data auto-seeding)
 with app.app_context():
-    database.init_db()
+    database.init_db(seed_demo=False)
 
 
 # ---------------------------------------------------------------------
@@ -86,8 +87,8 @@ def index():
         found_items = matching_found
 
     # Highlighted showcase items for the interactive horizontal rail
-    # Uses top matching items if available, or recent campus items
-    rail_items = all_matching_items[:8] if all_matching_items else database.get_items()[:6]
+    # Displays up to 8 items matching the current active tab and filter criteria
+    rail_items = items[:8]
 
     # Overview statistics
     stats = database.get_statistics()
@@ -166,17 +167,17 @@ def submit_item():
             except ValueError:
                 errors.append("Invalid date format. Please use YYYY-MM-DD.")
 
-        if not description or len(description) < 5:
-            errors.append("Description must contain at least 5 characters.")
+        if not description or len(description) < 5 or len(description) > 2000:
+            errors.append("Description must be between 5 and 2000 characters.")
 
         if not poster_name or len(poster_name) < 2 or len(poster_name) > 60:
             errors.append("Your name must be between 2 and 60 characters.")
 
-        if not poster_contact or len(poster_contact) < 5:
-            errors.append("Please provide a contact email or phone number.")
+        if not poster_contact or len(poster_contact) < 5 or len(poster_contact) > 100:
+            errors.append("Please provide a contact email or phone number (maximum 100 characters).")
 
         if not pin or not re.match(r'^\d{4,8}$', pin):
-            errors.append("Security PIN must be 4 to 8 digits (numeric only, e.g., 1234).")
+            errors.append("Security PIN must be 4 to 8 digits (numeric only).")
 
         if errors:
             for err in errors:
@@ -208,11 +209,14 @@ def submit_item():
         )
         return redirect(url_for('item_detail', item_id=new_item_id))
 
+    preset_type = request.args.get('type', 'lost').strip().lower()
+    initial_type = preset_type if preset_type in ('lost', 'found') else 'lost'
+
     return render_template(
         'submit.html',
         categories=CATEGORIES,
         today=today,
-        form_data={}
+        form_data={'item_type': initial_type}
     )
 
 
@@ -225,39 +229,57 @@ def item_detail(item_id):
     if not item:
         abort(404)
 
+    contact_draft = None
+    if session.get('contact_draft') and session['contact_draft'].get('item_id') == item_id:
+        contact_draft = session.pop('contact_draft', None)
+
     return render_template(
         'item_detail.html',
         item=item,
         unlocked_messages=None,
-        pin_verified=False
+        pin_verified=False,
+        contact_draft=contact_draft
     )
 
 
 # ---------------------------------------------------------------------
 # Route: Safe Contact Request Interface (Submit an inquiry)
 # ---------------------------------------------------------------------
-@app.route('/items/<int:item_id>/contact', methods=['POST'])
+@app.route('/items/<int:item_id>/contact', methods=['GET', 'POST'])
 def submit_contact_request(item_id):
     item = database.get_item_by_id(item_id)
     if not item:
         abort(404)
+
+    if request.method == 'GET':
+        return redirect(url_for('item_detail', item_id=item_id, _anchor='contactSection'))
 
     sender_name = request.form.get('sender_name', '').strip()
     sender_contact = request.form.get('sender_contact', '').strip()
     message = request.form.get('message', '').strip()
 
     errors = []
-    if not sender_name or len(sender_name) < 2:
-        errors.append("Please enter your name (minimum 2 characters).")
-    if not sender_contact or len(sender_contact) < 5:
-        errors.append("Please provide your email address or phone number so the poster can reply.")
-    if not message or len(message) < 5:
-        errors.append("Inquiry message must be at least 5 characters.")
+    if not sender_name or len(sender_name) < 2 or len(sender_name) > 60:
+        errors.append("Please enter your name (between 2 and 60 characters).")
+    if not sender_contact or len(sender_contact) < 5 or len(sender_contact) > 100:
+        errors.append("Please provide your email address or phone number (between 5 and 100 characters).")
+    if not message or len(message) < 5 or len(message) > 2000:
+        errors.append("Inquiry message must be between 5 and 2000 characters.")
 
     if errors:
         for err in errors:
             flash(err, 'error')
+        session['contact_draft'] = {
+            'item_id': item_id,
+            'sender_name': sender_name,
+            'sender_contact': sender_contact,
+            'message': message
+        }
         return redirect(url_for('item_detail', item_id=item_id, _anchor='contactSection'))
+
+    # Clear draft on successful submission
+    if session.get('contact_draft') and session['contact_draft'].get('item_id') == item_id:
+        session.pop('contact_draft', None)
 
     # Save inquiry into SQLite database
     database.create_contact_request(item_id, sender_name, sender_contact, message)
@@ -273,11 +295,14 @@ def submit_contact_request(item_id):
 # ---------------------------------------------------------------------
 # Route: Update Item Status (Resolve or Reopen with PIN)
 # ---------------------------------------------------------------------
-@app.route('/items/<int:item_id>/status', methods=['POST'])
+@app.route('/items/<int:item_id>/status', methods=['GET', 'POST'])
 def update_status(item_id):
     item = database.get_item_by_id(item_id)
     if not item:
         abort(404)
+
+    if request.method == 'GET':
+        return redirect(url_for('item_detail', item_id=item_id, _anchor='resolutionControls'))
 
     submitted_pin = request.form.get('pin', '').strip()
     target_status = request.form.get('status', 'resolved').strip()
@@ -307,11 +332,14 @@ def update_status(item_id):
 # ---------------------------------------------------------------------
 # Route: Unlock Private Inquiries Inbox with PIN
 # ---------------------------------------------------------------------
-@app.route('/items/<int:item_id>/inbox', methods=['POST'])
+@app.route('/items/<int:item_id>/inbox', methods=['GET', 'POST'])
 def view_inbox(item_id):
     item = database.get_item_by_id(item_id)
     if not item:
         abort(404)
+
+    if request.method == 'GET':
+        return redirect(url_for('item_detail', item_id=item_id, _anchor='posterInbox'))
 
     submitted_pin = request.form.get('pin', '').strip()
 
@@ -334,7 +362,8 @@ def view_inbox(item_id):
         'item_detail.html',
         item=item,
         unlocked_messages=messages,
-        pin_verified=True
+        pin_verified=True,
+        contact_draft=None
     )
 
 
@@ -352,6 +381,11 @@ def about():
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    return render_template('500.html'), 500
 
 
 if __name__ == '__main__':

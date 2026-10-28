@@ -1,14 +1,14 @@
 {% extends 'base.html' %}
 
-{% block title %}About CampusConnect & Hackathon Guide{% endblock %}
+{% block title %}About CampusConnect &amp; Guide{% endblock %}
 
 {% block content %}
 <div class="about-container">
     <div class="about-hero">
-        <span class="about-badge">🏛️ University Architecture &amp; Hackathon Guide</span>
-        <h1 class="about-title">About CampusConnect Lost &amp; Found</h1>
+        <span class="about-badge">🏛️ Campus Guide</span>
+        <h1 class="about-title">About CampusConnect</h1>
         <p class="about-lead">
-            A high-efficiency, privacy-preserving, and secure collegiate lost-and-found system engineered specifically for university campuses and student unions.
+            A secure, privacy-first lost and found directory engineered for university campuses.
         </p>
     </div>
 
@@ -16,57 +16,57 @@
         <!-- Card 1: Safe Contact Interface -->
         <div class="about-card">
             <div class="about-card-icon" aria-hidden="true">🛡️</div>
-            <h2 class="about-card-title">Safe Contact System</h2>
+            <h2 class="about-card-title">Safe Inquiries</h2>
             <p class="about-card-text">
-                Traditional notice boards force students to post private phone numbers and personal emails publicly, leading to spam, stalking, and unwanted contact.
+                Traditional notice boards expose personal phone numbers and emails publicly.
             </p>
             <p class="about-card-text">
-                CampusConnect protects privacy: inquirers submit messages through an encrypted local inbox stored directly in SQLite. Only the verified poster can unlock and view them.
+                CampusConnect protects privacy by routing messages through a private inbox that only the verified poster can unlock.
             </p>
         </div>
 
         <!-- Card 2: Security & Authorization -->
         <div class="about-card">
             <div class="about-card-icon" aria-hidden="true">🔐</div>
-            <h2 class="about-card-title">PIN-Based Authorization</h2>
+            <h2 class="about-card-title">PIN Authorization</h2>
             <p class="about-card-text">
-                No complex or expensive OAuth subscriptions needed! When posting an item, the user creates a personal 4-to-8 digit PIN.
+                No complex logins or external accounts required. When posting an item, you choose a 4-to-8 digit PIN.
             </p>
             <p class="about-card-text">
-                The PIN is securely hashed using PBKDF2/SHA256 (via <code>werkzeug.security</code>). Anonymous public users cannot tamper with, edit, or maliciously resolve other students' items.
+                The PIN is securely hashed using PBKDF2/SHA256 so only you can resolve your listing or view messages.
             </p>
         </div>
 
         <!-- Card 3: Free & Accessible Tech Stack -->
         <div class="about-card">
             <div class="about-card-icon" aria-hidden="true">💻</div>
-            <h2 class="about-card-title">100% Free Local Stack</h2>
+            <h2 class="about-card-title">Free Local Stack</h2>
             <p class="about-card-text">
-                Built strictly with free, standard software:
+                Built strictly with standard open technologies:
             </p>
             <ul class="about-list">
                 <li><strong>Backend:</strong> Python Flask</li>
-                <li><strong>Database:</strong> Built-in SQLite (<code>sqlite3</code>) with parameterized SQL queries</li>
-                <li><strong>Frontend:</strong> Semantic HTML5, Jinja2, custom responsive CSS, and vanilla JS</li>
-                <li><strong>Cost:</strong> $0.00 — Zero paid subscriptions or proprietary cloud APIs</li>
+                <li><strong>Database:</strong> SQLite with parameterized queries</li>
+                <li><strong>Frontend:</strong> Responsive CSS and Vanilla JavaScript</li>
+                <li><strong>Cost:</strong> $0.00 — Zero paid APIs or subscriptions</li>
             </ul>
         </div>
     </div>
 
-    <!-- Judge & Evaluator Guide -->
+    <!-- How CampusConnect Works Guide -->
     <div class="demo-instructions-panel">
         <div class="demo-instructions-header">
             <span class="demo-star" aria-hidden="true">⭐</span>
-            <h2>Judge &amp; Evaluator Quick-Start Guide</h2>
+            <h2>How CampusConnect Works</h2>
         </div>
 
         <div class="demo-steps">
             <div class="demo-step">
                 <span class="step-num">1</span>
                 <div class="step-content">
-                    <h3>Explore Demo Records &amp; Interactive Rail</h3>
+                    <h3>Browse &amp; Search</h3>
                     <p>
-                        CampusConnect pre-seeds realistic records across popular campus spots (Library, Science Hall, Rec Center, Bus Stop). Each sample record is clearly badged with <strong>DEMO DATA</strong>.
+                        Search active lost and found listings across campus buildings by keyword, category, location, or date.
                     </p>
                 </div>
             </div>
@@ -74,9 +74,9 @@
             <div class="demo-step">
                 <span class="step-num">2</span>
                 <div class="step-content">
-                    <h3>Try the Demo Security PIN (<code class="gold-code">1234</code>)</h3>
+                    <h3>Report an Item</h3>
                     <p>
-                        All demo records use the PIN <code>1234</code>. You can test resolving an open item, reopening a resolved item, or unlocking the private inquiry inbox on any demo card.
+                        Submit details for a lost or found possession. You choose a secret 4–8 digit Security PIN to manage the post.
                     </p>
                 </div>
             </div>
@@ -84,9 +84,9 @@
             <div class="demo-step">
                 <span class="step-num">3</span>
                 <div class="step-content">
-                    <h3>Test Submitting a New Item</h3>
+                    <h3>Safe Inquiries</h3>
                     <p>
-                        Click <strong>Report Item</strong> to test the submission form. Form validation protects against missing fields, short descriptions, and invalid PINs.
+                        Community members send messages through the secure contact form. Direct phone and email remain private.
                     </p>
                 </div>
             </div>
@@ -94,17 +94,17 @@
             <div class="demo-step">
                 <span class="step-num">4</span>
                 <div class="step-content">
-                    <h3>Submit a Safe Inquiry</h3>
+                    <h3>Resolve with PIN</h3>
                     <p>
-                        Open any item detail page and send a contact message. Verify that your message is safely stored in the database and visible only after entering the item PIN.
+                        Once an item is safely returned, enter your Security PIN to mark the listing resolved or review inquiry messages.
                     </p>
                 </div>
             </div>
         </div>
 
         <div class="demo-cta-row">
-            <a href="{{ url_for('index') }}" class="btn-primary">Browse All Campus Items</a>
-            <a href="{{ url_for('submit_item') }}" class="btn-secondary">Report an Item</a>
+            <a href="{{ url_for('index') }}" class="btn-primary">Browse Items</a>
+            <a href="{{ url_for('submit_item') }}" class="btn-secondary">Report Item</a>
         </div>
     </div>
 </div>

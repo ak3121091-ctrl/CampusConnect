@@ -19,7 +19,7 @@
                 </span>
                 <div class="brand-text">
                     <span class="brand-name">Campus<span class="brand-accent">Connect</span></span>
-                    <span class="brand-tagline">University Lost &amp; Found Portal</span>
+                    <span class="brand-tagline">Lost &amp; Found</span>
                 </div>
             </a>
 
@@ -36,10 +36,10 @@
                     <span class="nav-link-icon">📁</span> Directory
                 </a>
                 <a href="{{ url_for('about') }}" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">
-                    <span class="nav-link-icon">📖</span> Guide &amp; Demo
+                    <span class="nav-link-icon">ℹ️</span> About
                 </a>
                 <a href="{{ url_for('submit_item') }}" class="nav-btn-primary">
-                    <span class="btn-icon">➕</span> Report an Item
+                    <span class="btn-icon">＋</span> Report Item
                 </a>
             </nav>
         </div>
@@ -87,31 +87,28 @@
                 <div class="footer-brand">
                     <span class="brand-crest-sm">🏛️</span>
                     <span class="footer-brand-title">Campus<strong>Connect</strong></span>
-                    <span class="footer-status-pill">● System Online</span>
+                    <span class="footer-status-pill">● Online</span>
                 </div>
                 <p class="footer-description">
-                    Safe, privacy-first university lost-and-found registry. Reconnecting students, faculty, and campus staff with their misplaced belongings.
+                    Privacy-first campus lost and found directory. Reconnecting our community with misplaced belongings.
                 </p>
                 <div class="footer-badges-list">
-                    <span class="trust-badge">🔒 Privacy Protected Inquiries</span>
-                    <span class="trust-badge">🛡️ PIN-Hashed Ownership</span>
-                    <span class="trust-badge">⚡ Zero-Cost Local Stack</span>
+                    <span class="trust-badge">🔒 Private Inquiries</span>
+                    <span class="trust-badge">🛡️ PIN-Protected</span>
                 </div>
             </div>
             <div class="footer-right">
                 <div class="footer-card">
                     <div class="footer-card-header">
-                        <span class="demo-pill">DEMO DATA ACTIVE</span>
+                        <span class="trust-badge">Campus Community</span>
                     </div>
-                    <p class="footer-hint">Judge Evaluation PIN for sample items: <code class="gold-code">1234</code></p>
-                    <p class="footer-meta">
-                        Engineered with Python Flask &amp; SQLite. Zero external paid APIs, telemetry, or subscriptions.
-                    </p>
+                    <p class="footer-hint">Report lost items, return found belongings, and search active listings safely.</p>
+                    <p class="footer-meta">Local, privacy-first university lost and found directory.</p>
                 </div>
             </div>
         </div>
         <div class="footer-sub-bottom">
-            <p>&copy; 2026 CampusConnect &bull; University Community Lost &amp; Found System</p>
+            <p>&copy; 2026 CampusConnect &bull; University Lost &amp; Found</p>
         </div>
     </footer>
 

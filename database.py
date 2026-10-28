@@ -10,9 +10,19 @@ prevent SQL Injection vulnerabilities.
 
 import sqlite3
 import os
+import shutil
+import datetime
 from werkzeug.security import generate_password_hash
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'campusconnect.db')
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'campusconnect.db')
+
+
+def get_db_path():
+    """
+    Returns the active SQLite database path. Supports an override
+    via the CAMPUSCONNECT_DB environment variable for testing or production.
+    """
+    return os.environ.get('CAMPUSCONNECT_DB') or DEFAULT_DB_PATH
 
 
 def get_db_connection():
@@ -21,16 +31,43 @@ def get_db_connection():
     sqlite3.Row allows column access by name (e.g., row['title']).
     Uses a 10.0-second timeout to prevent 'database is locked' errors on Windows.
     """
-    conn = sqlite3.connect(DB_PATH, timeout=10.0)
+    conn = sqlite3.connect(get_db_path(), timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
-def init_db():
+def backup_database(backup_path=None):
     """
-    Initializes database tables if they do not exist, and seeds initial
-    demo records so hackathon evaluators have instant data to explore.
+    Safely creates an atomic backup copy of the current database.
+    If backup_path is not specified, generates a timestamped file in the same directory.
+    """
+    source_path = get_db_path()
+    if not os.path.exists(source_path):
+        return None
+
+    if not backup_path:
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        base_dir = os.path.dirname(source_path)
+        backup_path = os.path.join(base_dir, f'campusconnect_backup_{timestamp}.db')
+
+    # Atomic online SQLite backup
+    src_conn = sqlite3.connect(source_path)
+    dst_conn = sqlite3.connect(backup_path)
+    with dst_conn:
+        src_conn.backup(dst_conn)
+    dst_conn.close()
+    src_conn.close()
+
+    return backup_path
+
+
+def init_db(seed_demo=False):
+    """
+    Initializes database tables if they do not exist.
+    By default, demo records are NEVER seeded automatically.
+    Seeding is only performed if explicitly requested (e.g. for testing)
+    or if the CAMPUSCONNECT_SEED_DEMO environment variable is set to '1'.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -69,31 +106,90 @@ def init_db():
 
     conn.commit()
 
-    # Check if database has any records; if empty, seed demo data
-    cursor.execute("SELECT COUNT(*) AS total FROM items")
-    count_row = cursor.fetchone()
-    if count_row['total'] == 0:
-        seed_demo_data(conn)
+    should_seed = seed_demo or os.environ.get('CAMPUSCONNECT_SEED_DEMO') == '1'
+    if should_seed:
+        cursor.execute("SELECT COUNT(*) AS total FROM items")
+        count_row = cursor.fetchone()
+        if count_row['total'] == 0:
+            seed_demo_data(conn)
 
     conn.close()
 
 
-def reset_db():
+def cleanup_demo_records(backup=True):
     """
-    Cleans and re-initializes tables and seeds fresh demo records.
-    Useful for testing and resetting demo state for judges.
+    Explicitly and safely removes all known demo records (is_demo = 1)
+    and their associated contact inquiries from the active database.
+    
+    Preserves all genuine user-created records (is_demo = 0).
+    Performs an automatic database backup prior to deletion.
+    Returns a summary dictionary of the cleanup operation.
+    """
+    backup_file = None
+    if backup:
+        backup_file = backup_database()
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Identify demo records
+    cursor.execute("SELECT id, title FROM items WHERE is_demo = 1")
+    demo_items = cursor.fetchall()
+    demo_item_ids = [row['id'] for row in demo_items]
+
+    demo_inquiries_count = 0
+    if demo_item_ids:
+        placeholders = ','.join(['?'] * len(demo_item_ids))
+        cursor.execute(f"SELECT COUNT(*) AS count FROM contact_requests WHERE item_id IN ({placeholders})", demo_item_ids)
+        demo_inquiries_count = cursor.fetchone()['count']
+
+        # Delete inquiries for demo items
+        cursor.execute(f"DELETE FROM contact_requests WHERE item_id IN ({placeholders})", demo_item_ids)
+
+        # Delete demo items
+        cursor.execute(f"DELETE FROM items WHERE id IN ({placeholders})", demo_item_ids)
+
+    # 2. Defensive cleanup: if any genuine record had '[DEMO DATA]' in title, strip it
+    cursor.execute("""
+        UPDATE items 
+        SET title = TRIM(REPLACE(title, '[DEMO DATA]', ''))
+        WHERE title LIKE '%[DEMO DATA]%'
+    """)
+
+    conn.commit()
+
+    # Count remaining genuine records
+    cursor.execute("SELECT COUNT(*) AS count FROM items")
+    genuine_items_remaining = cursor.fetchone()['count']
+
+    conn.close()
+
+    return {
+        'backup_path': backup_file,
+        'demo_items_removed': len(demo_items),
+        'demo_inquiries_removed': demo_inquiries_count,
+        'genuine_items_remaining': genuine_items_remaining
+    }
+
+
+def reset_db(seed_demo=False):
+    """
+    Cleans and re-initializes tables.
+    Useful for testing and administrative resets.
+    By default creates clean empty tables without demo records.
     """
     conn = get_db_connection()
     conn.execute("DROP TABLE IF EXISTS contact_requests")
     conn.execute("DROP TABLE IF EXISTS items")
     conn.commit()
     conn.close()
-    init_db()
+    init_db(seed_demo=seed_demo)
 
 
-def seed_demo_data(conn):
+def seed_demo_data(conn, is_demo=1):
     """
-    Populates sample items clearly labeled as DEMO DATA.
+    Populates sample items for testing environments.
+    Items have realistic campus titles without ugly demo tags.
     Demo PIN for all sample items is '1234'.
     """
     cursor = conn.cursor()
@@ -102,7 +198,7 @@ def seed_demo_data(conn):
     sample_items = [
         (
             'lost',
-            '[DEMO DATA] TI-84 Plus CE Graphing Calculator',
+            'TI-84 Plus CE Graphing Calculator',
             'Electronics',
             'Science & Engineering Hall - Room 302',
             '2026-10-25',
@@ -111,11 +207,11 @@ def seed_demo_data(conn):
             'alex.chen@campus.edu',
             demo_pin_hash,
             'open',
-            1
+            is_demo
         ),
         (
             'found',
-            '[DEMO DATA] Blue Hydro Flask Water Bottle (32oz)',
+            'Blue Hydro Flask Water Bottle (32oz)',
             'Clothing & Accessories',
             'Main Campus Recreation Center - Bleachers',
             '2026-10-26',
@@ -124,11 +220,11 @@ def seed_demo_data(conn):
             'm.reed@campus.edu',
             demo_pin_hash,
             'open',
-            1
+            is_demo
         ),
         (
             'lost',
-            '[DEMO DATA] Student ID Card & Dorm Keycard',
+            'Student ID Card & Dorm Keycard',
             'Student IDs & Keys',
             'University Dining Commons / Quad walkway',
             '2026-10-24',
@@ -137,11 +233,11 @@ def seed_demo_data(conn):
             'tsmith@campus.edu',
             demo_pin_hash,
             'open',
-            1
+            is_demo
         ),
         (
             'found',
-            '[DEMO DATA] Apple AirPods Pro Case (White)',
+            'Apple AirPods Pro Case (White)',
             'Electronics',
             'Library 2nd Floor Silent Study Pods',
             '2026-10-26',
@@ -150,11 +246,11 @@ def seed_demo_data(conn):
             'library-lostfound@campus.edu',
             demo_pin_hash,
             'open',
-            1
+            is_demo
         ),
         (
             'lost',
-            '[DEMO DATA] Organic Chemistry 8th Edition Textbook',
+            'Organic Chemistry 8th Edition Textbook',
             'Books & Stationery',
             'Student Center Cafe Booths',
             '2026-10-23',
@@ -163,11 +259,11 @@ def seed_demo_data(conn):
             'jordan.p@campus.edu',
             demo_pin_hash,
             'open',
-            1
+            is_demo
         ),
         (
             'found',
-            '[DEMO DATA] Black North Face Backpack',
+            'Black North Face Backpack',
             'Bags & Backpacks',
             'Bus Stop #4 - North Campus Circle',
             '2026-10-22',
@@ -176,7 +272,7 @@ def seed_demo_data(conn):
             'transit-dispatch@campus.edu',
             demo_pin_hash,
             'resolved',
-            1
+            is_demo
         )
     ]
 
@@ -190,7 +286,7 @@ def seed_demo_data(conn):
 
     conn.commit()
 
-    # Add a sample contact inquiry on the first demo item so judges can test the inbox feature
+    # Add a sample contact inquiry on the first sample item for testing inbox
     cursor.execute("SELECT id FROM items WHERE title LIKE '%TI-84 Plus%' LIMIT 1")
     first_item = cursor.fetchone()
     if first_item:
@@ -199,7 +295,7 @@ def seed_demo_data(conn):
             VALUES (?, ?, ?, ?)
         """, (
             first_item['id'],
-            'Demo Inquirer (Sam)',
+            'Sam TA',
             'sam99@campus.edu',
             'Hi Alex, I think the teaching assistant picked up a calculator from Room 302 and left it at the departmental office desk!'
         ))
@@ -210,10 +306,11 @@ def seed_demo_data(conn):
 # Database Query Helper Functions (All Parameterized!)
 # =====================================================================
 
-def get_items(search_query=None, item_type=None, category=None, status=None):
+def get_items(search_query=None, item_type=None, category=None, status=None, include_demo=False):
     """
     Queries items with optional search and filter criteria.
     Uses parameterized SQL to guarantee protection against SQL injection.
+    By default, only genuine user reports (is_demo = 0) are returned.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -226,15 +323,20 @@ def get_items(search_query=None, item_type=None, category=None, status=None):
     """
     params = []
 
+    if not include_demo:
+        sql += " AND is_demo = 0"
+
     if search_query and search_query.strip():
+        clean_q = search_query.strip()
+        escaped_q = clean_q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        wildcard = f"%{escaped_q}%"
         sql += """ AND (
-            title LIKE ? OR 
-            description LIKE ? OR 
-            location LIKE ? OR 
-            poster_name LIKE ? OR 
-            category LIKE ?
+            title LIKE ? ESCAPE '\\' OR 
+            description LIKE ? ESCAPE '\\' OR 
+            location LIKE ? ESCAPE '\\' OR 
+            poster_name LIKE ? ESCAPE '\\' OR 
+            category LIKE ? ESCAPE '\\'
         )"""
-        wildcard = f"%{search_query.strip()}%"
         params.extend([wildcard, wildcard, wildcard, wildcard, wildcard])
 
     if item_type and item_type in ('lost', 'found'):
@@ -352,22 +454,26 @@ def get_contact_requests_for_item(item_id):
     return requests
 
 
-def get_statistics():
+def get_statistics(include_demo=False):
     """
     Returns quick stats for the dashboard header:
     total items, open lost, open found, total resolved.
+    Calculates counters from genuine database records.
     Uses a single aggregate SQL query for efficiency.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    where_clause = "WHERE 1=1" if include_demo else "WHERE is_demo = 0"
+
+    cursor.execute(f"""
         SELECT 
             COUNT(*) AS total,
             SUM(CASE WHEN item_type = 'lost' AND status = 'open' THEN 1 ELSE 0 END) AS open_lost,
             SUM(CASE WHEN item_type = 'found' AND status = 'open' THEN 1 ELSE 0 END) AS open_found,
             SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
         FROM items
+        {where_clause}
     """)
     row = cursor.fetchone()
     conn.close()
