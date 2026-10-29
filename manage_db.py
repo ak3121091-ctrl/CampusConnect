@@ -6,6 +6,7 @@ Usage:
     python manage_db.py backup      - Create a safe atomic backup copy of the database
     python manage_db.py clean       - Safely back up and remove all demo records
     python manage_db.py init        - Initialize tables if they do not exist (no seeding)
+    python manage_db.py migrate     - Safely add new columns (e.g. image_filename) preserving data
     python manage_db.py reset-empty - Back up and reset database to clean empty state
     python manage_db.py seed        - Seed sample testing records (flagged is_demo = 1)
 """
@@ -87,6 +88,24 @@ def do_init():
     print("Tables ready. No demo data was seeded.")
 
 
+def do_migrate():
+    """Applies safe database migrations."""
+    db_path = database.get_db_path()
+    if not os.path.exists(db_path):
+        print("Database does not exist yet. Initializing...")
+        database.init_db()
+        print("[SUCCESS] Database initialized with latest schema.")
+        return
+    backup_path = database.backup_database()
+    if backup_path:
+        print(f"Pre-migration backup created at: {backup_path}")
+    migrated = database.migrate_db()
+    if migrated:
+        print("[SUCCESS] Database migrated successfully. 'image_filename' column added.")
+    else:
+        print("[INFO] Database schema is already up to date. No migration needed.")
+
+
 def do_reset_empty():
     """Backs up and resets database to an empty state."""
     db_path = database.get_db_path()
@@ -120,6 +139,8 @@ def main():
         do_clean()
     elif cmd == 'init':
         do_init()
+    elif cmd == 'migrate':
+        do_migrate()
     elif cmd == 'reset-empty':
         do_reset_empty()
     elif cmd == 'seed':

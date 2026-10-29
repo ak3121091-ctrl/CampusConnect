@@ -16,7 +16,8 @@
             </p>
         </div>
 
-        <form action="{{ url_for('submit_item') }}" method="POST" class="item-form" novalidate>
+        <form action="{{ url_for('submit_item') }}" method="POST" enctype="multipart/form-data" class="item-form" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- 1. Report Type Selection -->
             <div class="form-section">
                 <label class="form-label required">Item Type</label>
@@ -126,10 +127,90 @@
                 </div>
             </div>
 
+            <!-- 2. Photo Attachment (Camera / Upload) -->
+            <div class="form-section">
+                <div class="section-title-bar">
+                    <span class="section-number">2</span>
+                    <div>
+                        <h2 class="section-heading-sm">Item Photograph</h2>
+                        <span class="optional-badge">Optional</span>
+                    </div>
+                </div>
+
+                <div class="photo-upload-zone" id="photoUploadZone">
+                    <!-- Hidden mobile-compatible file inputs with accessibility labels -->
+                    <input
+                        type="file"
+                        id="cameraInput"
+                        name="photo_camera"
+                        accept="image/jpeg,image/png,image/webp,image/*"
+                        capture="environment"
+                        class="sr-only photo-file-input"
+                        aria-label="Capture photo using camera"
+                    >
+                    <input
+                        type="file"
+                        id="fileInput"
+                        name="photo_file"
+                        accept="image/jpeg,image/png,image/webp,image/*"
+                        class="sr-only photo-file-input"
+                        aria-label="Upload photo from device"
+                    >
+
+                    <!-- Two primary action options: Take Photo & Upload Photo -->
+                    <div class="photo-action-buttons" id="photoActionButtons">
+                        <button type="button" class="btn-photo-action btn-camera" id="btnTakePhoto">
+                            <span class="photo-btn-icon" aria-hidden="true">📷</span>
+                            <div class="photo-btn-text-wrap">
+                                <strong class="photo-btn-title">Take Photo</strong>
+                                <span class="photo-btn-desc">Use device camera</span>
+                            </div>
+                        </button>
+
+                        <button type="button" class="btn-photo-action btn-gallery" id="btnUploadPhoto">
+                            <span class="photo-btn-icon" aria-hidden="true">📁</span>
+                            <div class="photo-btn-text-wrap">
+                                <strong class="photo-btn-title">Upload Photo</strong>
+                                <span class="photo-btn-desc">Browse local files</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <!-- Clean help text -->
+                    <div class="photo-help-text" id="photoHelpText">
+                        <span>Accepted formats: <strong>JPEG, PNG, WebP</strong>. Maximum file size: <strong>5 MB</strong>.</span>
+                    </div>
+
+                    <!-- Client-Side Instant Preview Card with Retake & Remove Controls -->
+                    <div class="photo-preview-card" id="photoPreviewCard" style="display: none;">
+                        <div class="photo-preview-image-wrap">
+                            <img id="photoPreviewImg" src="" alt="Selected item photo preview" class="photo-preview-img">
+                        </div>
+                        <div class="photo-preview-meta">
+                            <div class="preview-file-info">
+                                <span class="preview-filename" id="previewFilename">image.jpg</span>
+                                <span class="preview-filesize" id="previewFilesize">0 MB</span>
+                            </div>
+                            <div class="photo-preview-controls">
+                                <button type="button" class="btn-preview-control btn-retake" id="btnRetakePhoto">
+                                    <span aria-hidden="true">🔄</span> Retake / Change
+                                </button>
+                                <button type="button" class="btn-preview-control btn-remove" id="btnRemovePhoto">
+                                    <span aria-hidden="true">🗑️</span> Remove Photo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Client-side Error Display -->
+                    <div class="photo-error-message" id="photoErrorMessage" style="display: none;" role="alert"></div>
+                </div>
+            </div>
+
             <!-- 3. Contact & Security Information -->
             <div class="form-section form-section-highlight">
                 <div class="section-title-bar">
-                    <span class="section-number">2</span>
+                    <span class="section-number">3</span>
                     <div>
                         <h2 class="section-heading-sm">Contact &amp; Security PIN</h2>
                         <span class="privacy-badge">🔒 Private</span>

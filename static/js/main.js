@@ -162,20 +162,134 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // -------------------------------------------------------------------------
-    // 3. Filter Type Tabs (All / Lost / Found)
+    // 3. Filter Type Tabs, Search, Dropdowns, and Anchor Navigation
     // -------------------------------------------------------------------------
     const typeTabs = document.querySelectorAll('.type-tab-btn');
     const itemTypeInput = document.getElementById('itemTypeInput');
     const filterForm = document.getElementById('filterForm');
+    const categorySelect = document.getElementById('categorySelect');
+    const statusSelect = document.getElementById('statusSelect');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
 
-    if (typeTabs.length > 0 && itemTypeInput && filterForm) {
-        typeTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const selectedType = tab.getAttribute('data-type');
-                itemTypeInput.value = selectedType;
-                filterForm.submit();
-            });
+    function submitFilterForm(newType) {
+        if (!filterForm) return;
+
+        if (newType && itemTypeInput) {
+            itemTypeInput.value = newType;
+        }
+
+        // Keep selected tabs visually active and update aria-selected immediately
+        const activeType = (newType || (itemTypeInput ? itemTypeInput.value : 'all')) || 'all';
+        typeTabs.forEach(t => {
+            const isSelected = (t.getAttribute('data-type') === activeType);
+            t.classList.toggle('active', isSelected);
+            t.setAttribute('aria-selected', isSelected ? 'true' : 'false');
         });
+
+        // Collect form data and build clean query string while preserving #itemsResults anchor
+        const formData = new FormData(filterForm);
+        const params = new URLSearchParams();
+        for (const [key, value] of formData.entries()) {
+            const trimmed = value.trim();
+            if (trimmed) {
+                params.set(key, trimmed);
+            }
+        }
+
+        const baseUrl = (filterForm.getAttribute('action') || window.location.pathname).split('#')[0].split('?')[0];
+        const queryString = params.toString();
+        const targetUrl = baseUrl + (queryString ? '?' + queryString : '') + '#itemsResults';
+
+        window.location.href = targetUrl;
+    }
+
+    if (filterForm) {
+        // Intercept standard form submission (Enter key or Search button)
+        filterForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitFilterForm();
+        });
+
+        // Tab click and WAI-ARIA keyboard navigation
+        if (typeTabs.length > 0) {
+            typeTabs.forEach((tab, index) => {
+                tab.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const selectedType = tab.getAttribute('data-type');
+                    submitFilterForm(selectedType);
+                });
+
+                tab.addEventListener('keydown', (e) => {
+                    let targetIndex = null;
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        targetIndex = (index + 1) % typeTabs.length;
+                    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        targetIndex = (index - 1 + typeTabs.length) % typeTabs.length;
+                    } else if (e.key === 'Home') {
+                        e.preventDefault();
+                        targetIndex = 0;
+                    } else if (e.key === 'End') {
+                        e.preventDefault();
+                        targetIndex = typeTabs.length - 1;
+                    }
+
+                    if (targetIndex !== null) {
+                        typeTabs[targetIndex].focus();
+                        const nextType = typeTabs[targetIndex].getAttribute('data-type');
+                        submitFilterForm(nextType);
+                    }
+                });
+            });
+        }
+
+        // Automatic submission on category / status dropdown changes
+        if (categorySelect) {
+            categorySelect.addEventListener('change', () => {
+                submitFilterForm();
+            });
+        }
+
+        if (statusSelect) {
+            statusSelect.addEventListener('change', () => {
+                submitFilterForm();
+            });
+        }
+    }
+
+    // Keyboard accessibility for Clear Search button (Space bar activation)
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                clearSearchBtn.click();
+            }
+        });
+    }
+
+    // Keyboard accessibility for active filter tag clear buttons
+    document.querySelectorAll('.filter-tag-clear, .clear-all-link').forEach(btn => {
+        btn.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault();
+                btn.click();
+            }
+        });
+    });
+
+    // Smooth scroll to results anchor if URL has #itemsResults (respecting prefers-reduced-motion)
+    if (window.location.hash === '#itemsResults') {
+        const resultsEl = document.getElementById('itemsResults');
+        if (resultsEl) {
+            const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            setTimeout(() => {
+                resultsEl.scrollIntoView({
+                    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+                    block: 'start'
+                });
+            }, 30);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -206,7 +320,146 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // -------------------------------------------------------------------------
-    // 6. Flash Alerts Auto-Dismissal
+    // 6. Photo Upload, Mobile Camera Capture & Instant Preview
+    // -------------------------------------------------------------------------
+    const cameraInput = document.getElementById('cameraInput');
+    const fileInput = document.getElementById('fileInput');
+    const btnTakePhoto = document.getElementById('btnTakePhoto');
+    const btnUploadPhoto = document.getElementById('btnUploadPhoto');
+    const photoActionButtons = document.getElementById('photoActionButtons');
+    const photoHelpText = document.getElementById('photoHelpText');
+    const photoPreviewCard = document.getElementById('photoPreviewCard');
+    const photoPreviewImg = document.getElementById('photoPreviewImg');
+    const previewFilename = document.getElementById('previewFilename');
+    const previewFilesize = document.getElementById('previewFilesize');
+    const btnRetakePhoto = document.getElementById('btnRetakePhoto');
+    const btnRemovePhoto = document.getElementById('btnRemovePhoto');
+    const photoErrorMessage = document.getElementById('photoErrorMessage');
+
+    const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5 MB
+    const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    function showPhotoError(msg) {
+        if (!photoErrorMessage) return;
+        photoErrorMessage.textContent = msg;
+        photoErrorMessage.style.display = 'block';
+    }
+
+    function clearPhotoError() {
+        if (!photoErrorMessage) return;
+        photoErrorMessage.textContent = '';
+        photoErrorMessage.style.display = 'none';
+    }
+
+    function handleSelectedFile(file, activeInput) {
+        clearPhotoError();
+        if (!file) return;
+
+        // Extension & Type checks
+        const ext = file.name ? file.name.split('.').pop().toLowerCase() : '';
+        const mime = file.type ? file.type.toLowerCase() : '';
+        const isValidExt = ALLOWED_EXTENSIONS.includes(ext);
+        const isValidMime = mime.startsWith('image/') || mime === '';
+
+        if (!isValidExt && !isValidMime) {
+            showPhotoError("Unsupported image format. Please select a JPEG, PNG, or WebP photo.");
+            activeInput.value = '';
+            return;
+        }
+
+        // File size check (5 MB limit)
+        if (file.size > MAX_PHOTO_BYTES) {
+            const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
+            showPhotoError(`Selected photo is ${sizeInMB} MB. Maximum allowed image size is 5 MB.`);
+            activeInput.value = '';
+            return;
+        }
+
+        // Clear the inactive input so only one file is sent
+        if (activeInput === cameraInput && fileInput) {
+            fileInput.value = '';
+        } else if (activeInput === fileInput && cameraInput) {
+            cameraInput.value = '';
+        }
+
+        // Generate client-side preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (photoPreviewImg) {
+                photoPreviewImg.src = e.target.result;
+            }
+            if (previewFilename) {
+                previewFilename.textContent = file.name || 'Captured Photo';
+            }
+            if (previewFilesize) {
+                const sizeDisplay = file.size > 1024 * 1024
+                    ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+                    : `${Math.round(file.size / 1024)} KB`;
+                previewFilesize.textContent = sizeDisplay;
+            }
+
+            if (photoActionButtons) photoActionButtons.style.display = 'none';
+            if (photoHelpText) photoHelpText.style.display = 'none';
+            if (photoPreviewCard) photoPreviewCard.style.display = 'flex';
+        };
+        reader.onerror = function() {
+            showPhotoError("Unable to read selected photo file. Please try another image.");
+        };
+        reader.readAsDataURL(file);
+    }
+
+    if (btnTakePhoto && cameraInput) {
+        btnTakePhoto.addEventListener('click', () => {
+            clearPhotoError();
+            cameraInput.click();
+        });
+        cameraInput.addEventListener('change', () => {
+            if (cameraInput.files && cameraInput.files[0]) {
+                handleSelectedFile(cameraInput.files[0], cameraInput);
+            }
+        });
+    }
+
+    if (btnUploadPhoto && fileInput) {
+        btnUploadPhoto.addEventListener('click', () => {
+            clearPhotoError();
+            fileInput.click();
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files && fileInput.files[0]) {
+                handleSelectedFile(fileInput.files[0], fileInput);
+            }
+        });
+    }
+
+    // Retake / Change Photo
+    if (btnRetakePhoto) {
+        btnRetakePhoto.addEventListener('click', () => {
+            clearPhotoError();
+            // Trigger file picker fallback by default for retake
+            if (fileInput) {
+                fileInput.click();
+            } else if (cameraInput) {
+                cameraInput.click();
+            }
+        });
+    }
+
+    // Remove Photo
+    if (btnRemovePhoto) {
+        btnRemovePhoto.addEventListener('click', () => {
+            if (cameraInput) cameraInput.value = '';
+            if (fileInput) fileInput.value = '';
+            if (photoPreviewImg) photoPreviewImg.src = '';
+            if (photoPreviewCard) photoPreviewCard.style.display = 'none';
+            if (photoActionButtons) photoActionButtons.style.display = 'grid';
+            if (photoHelpText) photoHelpText.style.display = 'block';
+            clearPhotoError();
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. Flash Alerts Auto-Dismissal
     // -------------------------------------------------------------------------
     const alerts = document.querySelectorAll('.flash-alert');
     alerts.forEach(alert => {

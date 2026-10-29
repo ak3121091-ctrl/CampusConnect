@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Too Many Requests - CampusConnect{% endblock %}
+
+{% block content %}
+<div class="empty-state-global error-card">
+    <div class="empty-icon" aria-hidden="true">⏳</div>
+    <span class="pill-badge pill-lost" style="margin: 0.5rem auto 1rem; display: inline-block;">429 RATE LIMIT EXCEEDED</span>
+    <h1 class="empty-title">Too Many Requests</h1>
+    <p class="empty-desc">
+        You have made too many submissions or verification attempts in a short period. Please wait a few moments and try again.
+    </p>
+    <div class="empty-actions" style="margin-top: 1.5rem;">
+        <a href="{{ url_for('index') }}" class="btn-primary">
+            Back to Directory
+        </a>
+    </div>
+</div>
+{% endblock %}
+

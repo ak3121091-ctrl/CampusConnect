@@ -1,4 +1,27 @@
 <article class="item-card {% if item.status == 'resolved' %}card-resolved{% endif %}">
+    <div class="card-media-wrap">
+        {% if item.image_filename %}
+            <a href="{{ url_for('item_detail', item_id=item.id) }}" class="card-media-link" tabindex="-1" aria-hidden="true">
+                <img src="{{ url_for('uploaded_file', filename=item.image_filename) }}" 
+                     alt="{{ item.title.replace('[DEMO DATA]', '').strip() }}" 
+                     class="item-card-img" 
+                     loading="lazy">
+            </a>
+        {% else %}
+            <div class="card-img-placeholder" aria-label="No photo provided">
+                <span class="placeholder-icon" aria-hidden="true">
+                    {% if item.category == 'Electronics' %}💻
+                    {% elif item.category == 'Student IDs & Keys' %}🔑
+                    {% elif item.category == 'Books & Stationery' %}📚
+                    {% elif item.category == 'Bags & Backpacks' %}🎒
+                    {% elif item.category == 'Clothing & Accessories' %}👕
+                    {% else %}📦{% endif %}
+                </span>
+                <span class="placeholder-label">No photo</span>
+            </div>
+        {% endif %}
+    </div>
+
     <div class="card-header">
         <div class="badge-cluster">
             <!-- Lost or Found Pill -->

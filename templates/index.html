@@ -22,9 +22,11 @@
                 <a href="{{ url_for('submit_item') }}" class="btn-hero-primary">
                     <span class="btn-icon">＋</span> Report Item
                 </a>
+                {% if rail_items %}
                 <a href="#discoveryRail" class="btn-hero-secondary">
                     <span class="btn-icon">⚡</span> Recent Items
                 </a>
+                {% endif %}
                 <a href="#searchSection" class="btn-hero-ghost">
                     <span class="btn-icon">🔍</span> Search Items
                 </a>
@@ -112,6 +114,26 @@
 
                             <!-- 3D Perspective Card -->
                             <article class="rail-card {% if item.status == 'resolved' %}card-resolved{% endif %}" tabindex="0">
+                                <div class="rail-card-media-wrap">
+                                    {% if item.image_filename %}
+                                        <img src="{{ url_for('uploaded_file', filename=item.image_filename) }}" 
+                                             alt="{{ item.title.replace('[DEMO DATA]', '').strip() }}" 
+                                             class="rail-card-img" 
+                                             loading="lazy">
+                                    {% else %}
+                                        <div class="rail-img-placeholder" aria-label="No photo provided">
+                                            <span class="placeholder-icon" aria-hidden="true">
+                                                {% if item.category == 'Electronics' %}💻
+                                                {% elif item.category == 'Student IDs & Keys' %}🔑
+                                                {% elif item.category == 'Books & Stationery' %}📚
+                                                {% elif item.category == 'Bags & Backpacks' %}🎒
+                                                {% elif item.category == 'Clothing & Accessories' %}👕
+                                                {% else %}📦{% endif %}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+
                                 <div class="rail-card-top">
                                     <div class="rail-type-pill {% if item.item_type == 'lost' %}pill-lost{% else %}pill-found{% endif %}">
                                         {% if item.item_type == 'lost' %}🔍 LOST{% else %}🎁 FOUND{% endif %}
@@ -168,20 +190,26 @@
     <!-- SEARCH & FILTERS BAR                                                  -->
     <!-- ===================================================================== -->
     <section class="filter-panel" id="searchSection" aria-label="Search and filter items">
-        <form action="{{ url_for('index') }}" method="GET" class="filter-form" id="filterForm">
+        <form action="{{ url_for('index') }}#itemsResults" method="GET" class="filter-form" id="filterForm">
             <!-- Search Keyword Input Group -->
             <div class="search-input-group">
                 <span class="search-icon" aria-hidden="true">🔍</span>
                 <input
                     type="text"
                     name="q"
+                    id="searchInput"
                     class="search-input"
                     placeholder="Search by keyword, building, category, or brand..."
                     value="{{ current_search }}"
                     aria-label="Search items by keyword"
                 >
                 {% if current_search %}
-                    <a href="{{ url_for('index') }}" class="search-clear-btn" title="Clear search" aria-label="Clear search input">&times;</a>
+                    <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                       class="search-clear-btn"
+                       id="clearSearchBtn"
+                       role="button"
+                       title="Clear search query"
+                       aria-label="Clear search query">&times;</a>
                 {% endif %}
                 <button type="submit" class="search-submit-btn">Search</button>
             </div>
@@ -193,24 +221,30 @@
                     <input type="hidden" name="type" id="itemTypeInput" value="{{ current_type }}">
                     
                     <button type="button"
+                            id="tabAllItems"
                             class="type-tab-btn {% if current_type == 'all' or not current_type %}active{% endif %}"
                             data-type="all"
                             role="tab"
-                            aria-selected="{% if current_type == 'all' or not current_type %}true{% else %}false{% endif %}">
+                            aria-selected="{% if current_type == 'all' or not current_type %}true{% else %}false{% endif %}"
+                            aria-controls="itemsResults">
                         All Items ({{ total_count }})
                     </button>
                     <button type="button"
+                            id="tabLostItems"
                             class="type-tab-btn tab-lost {% if current_type == 'lost' %}active{% endif %}"
                             data-type="lost"
                             role="tab"
-                            aria-selected="{% if current_type == 'lost' %}true{% else %}false{% endif %}">
+                            aria-selected="{% if current_type == 'lost' %}true{% else %}false{% endif %}"
+                            aria-controls="itemsResults">
                         🔍 Lost Items ({{ lost_count }})
                     </button>
                     <button type="button"
+                            id="tabFoundItems"
                             class="type-tab-btn tab-found {% if current_type == 'found' %}active{% endif %}"
                             data-type="found"
                             role="tab"
-                            aria-selected="{% if current_type == 'found' %}true{% else %}false{% endif %}">
+                            aria-selected="{% if current_type == 'found' %}true{% else %}false{% endif %}"
+                            aria-controls="itemsResults">
                         🎁 Found Items ({{ found_count }})
                     </button>
                 </div>
@@ -219,7 +253,7 @@
                 <div class="filter-selects">
                     <div class="select-wrapper">
                         <label for="categorySelect" class="sr-only">Category</label>
-                        <select name="category" id="categorySelect" class="filter-select" onchange="this.form.submit()">
+                        <select name="category" id="categorySelect" class="filter-select">
                             <option value="All" {% if current_category == 'All' or not current_category %}selected{% endif %}>
                                 All Categories
                             </option>
@@ -233,7 +267,7 @@
 
                     <div class="select-wrapper">
                         <label for="statusSelect" class="sr-only">Status</label>
-                        <select name="status" id="statusSelect" class="filter-select" onchange="this.form.submit()">
+                        <select name="status" id="statusSelect" class="filter-select">
                             <option value="all" {% if current_status == 'all' or not current_status %}selected{% endif %}>
                                 All Statuses
                             </option>
@@ -247,56 +281,99 @@
                     </div>
 
                     {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
-                        <a href="{{ url_for('index') }}" class="filter-reset-link" title="Clear all active filters">↺ Reset</a>
+                        <a href="{{ url_for('index') }}#itemsResults" class="filter-reset-link" title="Clear all active filters">↺ Reset</a>
                     {% endif %}
                 </div>
             </div>
         </form>
     </section>
 
-    <!-- Active Filters Summary Banner -->
-    {% if current_search or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
-        <div class="active-filter-banner" role="status">
-            <span class="active-filter-lead">Active filters:</span>
-            {% if current_search %}
-                <span class="filter-tag">Query: "{{ current_search }}"</span>
-            {% endif %}
-            {% if current_category and current_category != 'All' %}
-                <span class="filter-tag">Category: {{ current_category }}</span>
-            {% endif %}
-            {% if current_status and current_status != 'all' %}
-                <span class="filter-tag">Status: {{ current_status|capitalize }}</span>
-            {% endif %}
-            <a href="{{ url_for('index') }}" class="clear-all-link">Clear all</a>
-        </div>
-    {% endif %}
+    <!-- Results Area with Stable Anchor for Smooth/Accurate Scrolling -->
+    <div class="results-area" id="itemsResults">
 
-    <!-- Items Display Area -->
-    <div class="items-sections-wrapper">
+        <!-- Active Filters Summary Banner -->
+        {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
+            <div class="active-filter-banner" role="status" aria-label="Active filters">
+                <span class="active-filter-lead">Active filters:</span>
+                {% if current_type == 'lost' %}
+                    <span class="filter-tag tag-type-lost">
+                        Type: Lost
+                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove Lost filter"
+                           title="Remove Lost filter">&times;</a>
+                    </span>
+                {% elif current_type == 'found' %}
+                    <span class="filter-tag tag-type-found">
+                        Type: Found
+                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove Found filter"
+                           title="Remove Found filter">&times;</a>
+                    </span>
+                {% endif %}
+                {% if current_search %}
+                    <span class="filter-tag tag-query">
+                        Query: "{{ current_search }}"
+                        <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove search query filter"
+                           title="Remove search query filter">&times;</a>
+                    </span>
+                {% endif %}
+                {% if current_category and current_category != 'All' %}
+                    <span class="filter-tag tag-category">
+                        Category: {{ current_category }}
+                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category='All', status=current_status if current_status != 'all' else None) }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove Category filter"
+                           title="Remove Category filter">&times;</a>
+                    </span>
+                {% endif %}
+                {% if current_status and current_status != 'all' %}
+                    <span class="filter-tag tag-status">
+                        Status: {{ current_status|capitalize }}
+                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status='all') }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove Status filter"
+                           title="Remove Status filter">&times;</a>
+                    </span>
+                {% endif %}
+                <a href="{{ url_for('index') }}#itemsResults" class="clear-all-link" id="clearAllFiltersBtn" role="button">Clear all</a>
+            </div>
+        {% endif %}
 
-        {% if stats.total == 0 %}
-            <!-- Welcoming Empty State When Zero Items in Database -->
-            <div class="empty-state-global">
-                <div class="empty-icon" aria-hidden="true">🏛️</div>
-                <h2 class="empty-title">Campus Directory is Clear</h2>
-                <p class="empty-desc">No missing or turned-in belongings are currently reported on campus.</p>
-                <div class="empty-actions">
-                    <a href="{{ url_for('submit_item') }}?type=lost" class="btn-secondary">Report Lost</a>
-                    <a href="{{ url_for('submit_item') }}?type=found" class="btn-primary">Report Found</a>
+        <!-- Items Display Area -->
+        <div class="items-sections-wrapper">
+
+            {% if stats.total == 0 %}
+                <!-- Welcoming Empty State When Zero Items in Database -->
+                <div class="empty-state-global">
+                    <div class="empty-icon" aria-hidden="true">🏛️</div>
+                    <h2 class="empty-title">No items yet</h2>
+                    <p class="empty-desc">Nothing is reported on campus yet. Be the first to post a lost or found item.</p>
+                    <div class="empty-actions">
+                        <a href="{{ url_for('submit_item') }}?type=lost" class="btn-secondary">Report Lost Item</a>
+                        <a href="{{ url_for('submit_item') }}?type=found" class="btn-primary">Report Found Item</a>
+                    </div>
                 </div>
-            </div>
-        {% elif not items %}
-            <!-- Filtered Search Empty State -->
-            <div class="empty-state-global">
-                <div class="empty-icon" aria-hidden="true">🔍</div>
-                <h2 class="empty-title">No Matching Items</h2>
-                <p class="empty-desc">No records match your active search or filter criteria.</p>
-                <div class="empty-actions">
-                    <a href="{{ url_for('index') }}" class="btn-secondary">Reset Filters</a>
-                    <a href="{{ url_for('submit_item') }}" class="btn-primary">Report an Item</a>
+            {% elif not items %}
+                <!-- Filtered Search Empty State -->
+                <div class="empty-state-global">
+                    <div class="empty-icon" aria-hidden="true">🔍</div>
+                    <h2 class="empty-title">No matching items found</h2>
+                    <p class="empty-desc">Nothing matches your current filters. Try a different search or reset to browse all items.</p>
+                    <div class="empty-actions">
+                        <a href="{{ url_for('index') }}#itemsResults" class="btn-secondary">Reset Filters</a>
+                        <a href="{{ url_for('submit_item') }}" class="btn-primary">Report an Item</a>
+                    </div>
                 </div>
-            </div>
-        {% else %}
+            {% else %}
             <!-- SECTION 1: Lost Items Section -->
             {% if current_type == 'all' or current_type == 'lost' %}
                 <section class="item-group-section lost-section" id="lostItemsSection">
@@ -305,7 +382,6 @@
                             <span class="section-icon lost-icon-bg" aria-hidden="true">🔍</span>
                             <div>
                                 <h2 class="section-heading">Lost Items</h2>
-                                <p class="section-subtext">Missing belongings reported across campus.</p>
                             </div>
                             <span class="section-count-badge lost-badge">{{ lost_items|length }}</span>
                         </div>
@@ -320,9 +396,9 @@
                     {% else %}
                         <div class="empty-state">
                             <div class="empty-icon" aria-hidden="true">🔎</div>
-                            <h3 class="empty-title">No lost items found</h3>
-                            <p class="empty-desc">Try adjusting your search or report a lost item.</p>
-                            <a href="{{ url_for('submit_item') }}?type=lost" class="btn-secondary">Report Lost</a>
+                            <h3 class="empty-title">No lost items reported</h3>
+                            <p class="empty-desc">Lost a possession on campus? Report it to help recover it.</p>
+                            <a href="{{ url_for('submit_item') }}?type=lost" class="btn-secondary">Report Lost Item</a>
                         </div>
                     {% endif %}
                 </section>
@@ -344,7 +420,6 @@
                             <span class="section-icon found-icon-bg" aria-hidden="true">🎁</span>
                             <div>
                                 <h2 class="section-heading">Found Items</h2>
-                                <p class="section-subtext">Turned-in items awaiting their owners.</p>
                             </div>
                             <span class="section-count-badge found-badge">{{ found_items|length }}</span>
                         </div>
@@ -359,15 +434,16 @@
                     {% else %}
                         <div class="empty-state">
                             <div class="empty-icon" aria-hidden="true">📦</div>
-                            <h3 class="empty-title">No found items found</h3>
-                            <p class="empty-desc">Spotted something on campus? Help return it.</p>
-                            <a href="{{ url_for('submit_item') }}?type=found" class="btn-primary">Report Found</a>
+                            <h3 class="empty-title">No found items reported</h3>
+                            <p class="empty-desc">Found an item on campus? List it here to help reunite it with its owner.</p>
+                            <a href="{{ url_for('submit_item') }}?type=found" class="btn-primary">Report Found Item</a>
                         </div>
                     {% endif %}
                 </section>
             {% endif %}
         {% endif %}
 
+    </div>
     </div>
 
 </div>

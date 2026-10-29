@@ -7,7 +7,7 @@
 
     <!-- Breadcrumb / Back Link -->
     <nav class="breadcrumb-nav" aria-label="Breadcrumb">
-        <a href="{{ url_for('index') }}" class="back-link">
+        <a href="{{ url_for('index') }}#itemsResults" class="back-link">
             <span class="back-arrow">&larr;</span> Back to Directory
         </a>
         <span class="breadcrumb-divider">/</span>
@@ -54,6 +54,38 @@
 
         <!-- Left Column: Item Information & Owner Controls -->
         <div class="detail-col-info">
+
+            <!-- Item Photograph Panel -->
+            <div class="content-panel photo-panel">
+                <div class="panel-header-simple">
+                    <span class="panel-icon-badge" aria-hidden="true">📷</span>
+                    <h2 class="panel-heading">Item Photograph</h2>
+                </div>
+
+                {% if item.image_filename %}
+                    <div class="detail-photo-frame">
+                        <img src="{{ url_for('uploaded_file', filename=item.image_filename) }}" 
+                             alt="{{ item.title.replace('[DEMO DATA]', '').strip() }}" 
+                             class="detail-photo-img">
+                    </div>
+                {% else %}
+                    <div class="detail-photo-placeholder">
+                        <span class="detail-placeholder-icon" aria-hidden="true">
+                            {% if item.category == 'Electronics' %}💻
+                            {% elif item.category == 'Student IDs & Keys' %}🔑
+                            {% elif item.category == 'Books & Stationery' %}📚
+                            {% elif item.category == 'Bags & Backpacks' %}🎒
+                            {% elif item.category == 'Clothing & Accessories' %}👕
+                            {% else %}📦{% endif %}
+                        </span>
+                        <div class="detail-placeholder-text">
+                            <strong>No photo uploaded</strong>
+                            <span>The poster did not attach a photograph for this item report.</span>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
             <div class="content-panel info-panel">
                 <div class="panel-header-simple">
                     <span class="panel-icon-badge" aria-hidden="true">📋</span>
@@ -116,6 +148,7 @@
                 </p>
 
                 <form action="{{ url_for('update_status', item_id=item.id) }}" method="POST" class="status-action-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-group">
                         <label for="statusPin" class="form-label required">Security PIN</label>
                         <div class="pin-input-wrap">
@@ -168,6 +201,7 @@
                 </p>
 
                 <form action="{{ url_for('submit_contact_request', item_id=item.id) }}" method="POST" class="contact-inquiry-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-group">
                         <label for="sender_name" class="form-label required">Your Name</label>
                         <input
@@ -264,6 +298,7 @@
                     </p>
 
                     <form action="{{ url_for('view_inbox', item_id=item.id) }}" method="POST" class="inbox-unlock-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-group">
                             <label for="inboxPin" class="form-label required">Security PIN</label>
                             <div class="pin-input-wrap">
