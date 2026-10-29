@@ -34,34 +34,34 @@
 
             <!-- Collegiate Stats Bar -->
             <div class="stats-grid">
-                <div class="stat-card">
+                <a href="{{ url_for('index', status='all') }}#itemsResults" class="stat-card stat-card-link" aria-label="View all {{ stats.total }} items">
                     <div class="stat-icon-wrap stat-icon-total">📊</div>
                     <div class="stat-details">
                         <span class="stat-number">{{ stats.total }}</span>
                         <span class="stat-label">Total</span>
                     </div>
-                </div>
-                <div class="stat-card stat-lost">
+                </a>
+                <a href="{{ url_for('index', type='lost') }}#itemsResults" class="stat-card stat-lost stat-card-link" aria-label="View {{ stats.open_lost }} open lost items">
                     <div class="stat-icon-wrap stat-icon-lost">🔍</div>
                     <div class="stat-details">
                         <span class="stat-number">{{ stats.open_lost }}</span>
                         <span class="stat-label">Open Lost</span>
                     </div>
-                </div>
-                <div class="stat-card stat-found">
+                </a>
+                <a href="{{ url_for('index', type='found') }}#itemsResults" class="stat-card stat-found stat-card-link" aria-label="View {{ stats.open_found }} open found items">
                     <div class="stat-icon-wrap stat-icon-found">🎁</div>
                     <div class="stat-details">
                         <span class="stat-number">{{ stats.open_found }}</span>
                         <span class="stat-label">Open Found</span>
                     </div>
-                </div>
-                <div class="stat-card stat-resolved">
+                </a>
+                <a href="{{ url_for('index', status='resolved') }}#itemsResults" class="stat-card stat-resolved stat-card-link" aria-label="View {{ stats.resolved }} resolved items">
                     <div class="stat-icon-wrap stat-icon-resolved">✔️</div>
                     <div class="stat-details">
                         <span class="stat-number">{{ stats.resolved }}</span>
                         <span class="stat-label">Resolved</span>
                     </div>
-                </div>
+                </a>
             </div>
         </div>
     </section>
@@ -69,7 +69,7 @@
     <!-- ===================================================================== -->
     <!-- INTERACTIVE CAMPUS DISCOVERY RAIL (Recent Items Showcase)             -->
     <!-- ===================================================================== -->
-    {% if rail_items %}
+    {% if rail_items and current_status != 'resolved' %}
     <section class="discovery-rail-section" id="discoveryRail" aria-label="Recent Items Showcase Rail">
         <div class="rail-header">
             <div class="rail-title-group">
@@ -204,7 +204,7 @@
                     aria-label="Search items by keyword"
                 >
                 {% if current_search %}
-                    <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                    <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if has_explicit_status else None) }}#itemsResults"
                        class="search-clear-btn"
                        id="clearSearchBtn"
                        role="button"
@@ -216,36 +216,45 @@
 
             <!-- Filter Controls Row -->
             <div class="filters-row">
-                <!-- Type Filter Tabs (All Items / Lost Items / Found Items) -->
-                <div class="filter-type-tabs" role="tablist" aria-label="Filter by item type">
+                <!-- Type & Status Filter Tabs -->
+                <div class="filter-type-tabs" role="tablist" aria-label="Filter by item type or status">
                     <input type="hidden" name="type" id="itemTypeInput" value="{{ current_type }}">
                     
                     <button type="button"
                             id="tabAllItems"
-                            class="type-tab-btn {% if current_type == 'all' or not current_type %}active{% endif %}"
+                            class="type-tab-btn {% if (current_type == 'all' or not current_type) and current_status != 'resolved' %}active{% endif %}"
                             data-type="all"
                             role="tab"
-                            aria-selected="{% if current_type == 'all' or not current_type %}true{% else %}false{% endif %}"
+                            aria-selected="{% if (current_type == 'all' or not current_type) and current_status != 'resolved' %}true{% else %}false{% endif %}"
                             aria-controls="itemsResults">
                         All Items ({{ total_count }})
                     </button>
                     <button type="button"
                             id="tabLostItems"
-                            class="type-tab-btn tab-lost {% if current_type == 'lost' %}active{% endif %}"
+                            class="type-tab-btn tab-lost {% if current_type == 'lost' and current_status != 'resolved' %}active{% endif %}"
                             data-type="lost"
                             role="tab"
-                            aria-selected="{% if current_type == 'lost' %}true{% else %}false{% endif %}"
+                            aria-selected="{% if current_type == 'lost' and current_status != 'resolved' %}true{% else %}false{% endif %}"
                             aria-controls="itemsResults">
                         🔍 Lost Items ({{ lost_count }})
                     </button>
                     <button type="button"
                             id="tabFoundItems"
-                            class="type-tab-btn tab-found {% if current_type == 'found' %}active{% endif %}"
+                            class="type-tab-btn tab-found {% if current_type == 'found' and current_status != 'resolved' %}active{% endif %}"
                             data-type="found"
                             role="tab"
-                            aria-selected="{% if current_type == 'found' %}true{% else %}false{% endif %}"
+                            aria-selected="{% if current_type == 'found' and current_status != 'resolved' %}true{% else %}false{% endif %}"
                             aria-controls="itemsResults">
                         🎁 Found Items ({{ found_count }})
+                    </button>
+                    <button type="button"
+                            id="tabResolvedItems"
+                            class="type-tab-btn tab-resolved {% if current_status == 'resolved' or current_type == 'resolved' %}active{% endif %}"
+                            data-type="resolved"
+                            role="tab"
+                            aria-selected="{% if current_status == 'resolved' or current_type == 'resolved' %}true{% else %}false{% endif %}"
+                            aria-controls="itemsResults">
+                        ✔️ Resolved ({{ resolved_count }})
                     </button>
                 </div>
 
@@ -259,7 +268,7 @@
                             </option>
                             {% for cat in categories %}
                                 <option value="{{ cat }}" {% if current_category == cat %}selected{% endif %}>
-                                    {{ cat }}
+                                     {{ cat }}
                                 </option>
                             {% endfor %}
                         </select>
@@ -268,19 +277,19 @@
                     <div class="select-wrapper">
                         <label for="statusSelect" class="sr-only">Status</label>
                         <select name="status" id="statusSelect" class="filter-select">
-                            <option value="all" {% if current_status == 'all' or not current_status %}selected{% endif %}>
-                                All Statuses
-                            </option>
                             <option value="open" {% if current_status == 'open' %}selected{% endif %}>
                                 Open Only
                             </option>
                             <option value="resolved" {% if current_status == 'resolved' %}selected{% endif %}>
                                 Resolved Only
                             </option>
+                            <option value="all" {% if current_status == 'all' %}selected{% endif %}>
+                                All Statuses
+                            </option>
                         </select>
                     </div>
 
-                    {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
+                    {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (has_explicit_status and current_status != 'open') %}
                         <a href="{{ url_for('index') }}#itemsResults" class="filter-reset-link" title="Clear all active filters">↺ Reset</a>
                     {% endif %}
                 </div>
@@ -292,13 +301,13 @@
     <div class="results-area" id="itemsResults">
 
         <!-- Active Filters Summary Banner -->
-        {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (current_status and current_status != 'all') %}
+        {% if current_search or (current_type and current_type != 'all') or (current_category and current_category != 'All') or (has_explicit_status and current_status != 'open') %}
             <div class="active-filter-banner" role="status" aria-label="Active filters">
                 <span class="active-filter-lead">Active filters:</span>
                 {% if current_type == 'lost' %}
                     <span class="filter-tag tag-type-lost">
                         Type: Lost
-                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if has_explicit_status else None) }}#itemsResults"
                            class="filter-tag-clear"
                            role="button"
                            aria-label="Remove Lost filter"
@@ -307,7 +316,7 @@
                 {% elif current_type == 'found' %}
                     <span class="filter-tag tag-type-found">
                         Type: Found
-                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                        <a href="{{ url_for('index', q=current_search or None, type='all', category=current_category if current_category != 'All' else None, status=current_status if has_explicit_status else None) }}#itemsResults"
                            class="filter-tag-clear"
                            role="button"
                            aria-label="Remove Found filter"
@@ -317,7 +326,7 @@
                 {% if current_search %}
                     <span class="filter-tag tag-query">
                         Query: "{{ current_search }}"
-                        <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if current_status != 'all' else None) }}#itemsResults"
+                        <a href="{{ url_for('index', type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status=current_status if has_explicit_status else None) }}#itemsResults"
                            class="filter-tag-clear"
                            role="button"
                            aria-label="Remove search query filter"
@@ -327,17 +336,26 @@
                 {% if current_category and current_category != 'All' %}
                     <span class="filter-tag tag-category">
                         Category: {{ current_category }}
-                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category='All', status=current_status if current_status != 'all' else None) }}#itemsResults"
+                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category='All', status=current_status if has_explicit_status else None) }}#itemsResults"
                            class="filter-tag-clear"
                            role="button"
                            aria-label="Remove Category filter"
                            title="Remove Category filter">&times;</a>
                     </span>
                 {% endif %}
-                {% if current_status and current_status != 'all' %}
+                {% if has_explicit_status and current_status != 'open' %}
                     <span class="filter-tag tag-status">
                         Status: {{ current_status|capitalize }}
-                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None, status='all') }}#itemsResults"
+                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None) }}#itemsResults"
+                           class="filter-tag-clear"
+                           role="button"
+                           aria-label="Remove Status filter"
+                           title="Remove Status filter">&times;</a>
+                    </span>
+                {% elif has_explicit_status and current_status == 'open' %}
+                    <span class="filter-tag tag-status">
+                        Status: Open
+                        <a href="{{ url_for('index', q=current_search or None, type=current_type if current_type != 'all' else None, category=current_category if current_category != 'All' else None) }}#itemsResults"
                            class="filter-tag-clear"
                            role="button"
                            aria-label="Remove Status filter"
@@ -373,6 +391,41 @@
                         <a href="{{ url_for('submit_item') }}" class="btn-primary">Report an Item</a>
                     </div>
                 </div>
+            {% elif current_status == 'resolved' or current_type == 'resolved' %}
+                <!-- DEDICATED SECTION: Resolved Items Archive -->
+                <section class="item-group-section resolved-section" id="resolvedItemsSection">
+                    <div class="section-header">
+                        <div class="section-title-wrap">
+                            <span class="section-icon resolved-icon-bg" aria-hidden="true">✔️</span>
+                            <div>
+                                <h2 class="section-heading">Resolved Items</h2>
+                                <p class="section-subtext">Recovered possessions safely reunited with their campus owners.</p>
+                            </div>
+                            <span class="section-count-badge resolved-badge">{{ items|length }}</span>
+                        </div>
+                    </div>
+
+                    {% if items %}
+                        <div class="cards-grid">
+                            {% for item in items %}
+                                {% include '_item_card.html' %}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="empty-state">
+                            <div class="empty-icon" aria-hidden="true">✔️</div>
+                            <h3 class="empty-title">No resolved items found</h3>
+                            <p class="empty-desc">
+                                {% if current_search or (current_category and current_category != 'All') %}
+                                    No resolved records match your current search or category filter.
+                                {% else %}
+                                    No items have been resolved yet. When items are marked as resolved by their owners, they will be archived here.
+                                {% endif %}
+                            </p>
+                            <a href="{{ url_for('index') }}#itemsResults" class="btn-secondary">Back to Active Directory</a>
+                        </div>
+                    {% endif %}
+                </section>
             {% else %}
             <!-- SECTION 1: Lost Items Section -->
             {% if current_type == 'all' or current_type == 'lost' %}

@@ -239,10 +239,15 @@ class CampusConnectTestCase(unittest.TestCase):
         html_res = res_res.data.decode('utf-8')
         self.assertIn('Found Casio Watch', html_res)
 
-        # Filter by category=Electronics
-        res_cat = self.client.get('/?category=Electronics')
+        # Filter by category=Electronics with status=resolved (Found Casio Watch is resolved)
+        res_cat = self.client.get('/?category=Electronics&status=resolved')
         self.assertEqual(res_cat.status_code, 200)
         self.assertIn('Found Casio Watch', res_cat.data.decode('utf-8'))
+
+        # In default active category listing, resolved watch must NOT appear
+        res_cat_active = self.client.get('/?category=Electronics')
+        self.assertEqual(res_cat_active.status_code, 200)
+        self.assertNotIn('Found Casio Watch', res_cat_active.data.decode('utf-8'))
 
     # ------------------------------------------------------------------
     # 7. Server-Side Input Validation
@@ -1462,6 +1467,1505 @@ class CampusConnectTestCase(unittest.TestCase):
         conn.close()
 
         self.assertIn('image_filename', columns)
+
+    # ------------------------------------------------------------------
+    # 46. Resolved Lost Item Disappears from Active Listings and Appears in Resolved
+    # ------------------------------------------------------------------
+    def test_46_resolved_lost_item_disappears_from_active_listings_and_appears_in_resolved(self):
+        """Verify resolving an open Lost item removes it from the homepage and places it in Resolved."""
+        suffix = uuid.uuid4().hex[:6]
+        item_title = f"Lost Calculus Calculator {suffix}"
+        pin = "2468"
+
+        item_id = database.create_item(
+            item_type='lost',
+            title=item_title,
+            category='Electronics',
+            location='Math Building 102',
+            event_date=datetime.date.today().strftime('%Y-%m-%d'),
+            description='Texas Instruments TI-84 with sticker.',
+            poster_name=f'Math Student {suffix}',
+            poster_contact='math@campus.edu',
+            pin_plain=pin
+        )
+
+        # 1. Before resolution: must appear on homepage and Lost section
+        res_home = self.client.get('/')
+        self.assertEqual(res_home.status_code, 200)
+        self.assertIn(item_title, res_home.data.decode('utf-8'))
+
+        res_lost = self.client.get('/?type=lost')
+        self.assertEqual(res_lost.status_code, 200)
+        self.assertIn(item_title, res_lost.data.decode('utf-8'))
+
+        # Must NOT be in resolved archive yet
+        res_resolved_before = self.client.get('/?status=resolved')
+        self.assertEqual(res_resolved_before.status_code, 200)
+        self.assertNotIn(item_title, res_resolved_before.data.decode('utf-8'))
+
+        # 2. Authorize resolution with valid PIN
+        res_resolve = self.client.post(f'/items/{item_id}/status', data={
+            'pin': pin,
+            'status': 'resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res_resolve.status_code, 200)
+        self.assertIn('RESOLVED', res_resolve.data.decode('utf-8'))
+
+        # 3. After resolution: must DISAPPEAR from active homepage and Lost section
+        res_home_after = self.client.get('/')
+        self.assertEqual(res_home_after.status_code, 200)
+        self.assertNotIn(item_title, res_home_after.data.decode('utf-8'))
+
+        res_lost_after = self.client.get('/?type=lost')
+        self.assertEqual(res_lost_after.status_code, 200)
+        self.assertNotIn(item_title, res_lost_after.data.decode('utf-8'))
+
+        # 4. Must APPEAR in the dedicated Resolved section
+        res_resolved_after = self.client.get('/?status=resolved')
+        self.assertEqual(res_resolved_after.status_code, 200)
+        html_resolved = res_resolved_after.data.decode('utf-8')
+        self.assertIn(item_title, html_resolved)
+        self.assertIn('RESOLVED', html_resolved)
+
+        # Database record must preserve full history and details
+        record = database.get_item_by_id(item_id)
+        self.assertEqual(record['status'], 'resolved')
+        self.assertEqual(record['title'], item_title)
+        self.assertEqual(record['location'], 'Math Building 102')
+
+    # ------------------------------------------------------------------
+    # 47. Resolved Found Item Disappears from Active Listings and Appears in Resolved
+    # ------------------------------------------------------------------
+    def test_47_resolved_found_item_disappears_from_active_listings_and_appears_in_resolved(self):
+        """Verify resolving an open Found item removes it from the homepage and places it in Resolved."""
+        suffix = uuid.uuid4().hex[:6]
+        item_title = f"Found Stainless Flask {suffix}"
+        pin = "1357"
+
+        item_id = database.create_item(
+            item_type='found',
+            title=item_title,
+            category='Clothing & Accessories',
+            location='Campus Gym Desk',
+            event_date=datetime.date.today().strftime('%Y-%m-%d'),
+            description='32oz Hydro Flask found near locker room.',
+            poster_name=f'Gym Attendant {suffix}',
+            poster_contact='gym@campus.edu',
+            pin_plain=pin
+        )
+
+        # 1. Before resolution: must appear on active listings
+        res_found = self.client.get('/?type=found')
+        self.assertIn(item_title, res_found.data.decode('utf-8'))
+
+        # 2. Authorize resolution with valid PIN
+        res_resolve = self.client.post(f'/items/{item_id}/status', data={
+            'pin': pin,
+            'status': 'resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res_resolve.status_code, 200)
+
+        # 3. After resolution: must DISAPPEAR from active found listings
+        res_found_after = self.client.get('/?type=found')
+        self.assertNotIn(item_title, res_found_after.data.decode('utf-8'))
+
+        # 4. Must APPEAR in the dedicated Resolved section
+        res_resolved = self.client.get('/?status=resolved')
+        self.assertIn(item_title, res_resolved.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 48. Dashboard Counters Accurately Reflect Item Resolutions
+    # ------------------------------------------------------------------
+    def test_48_dashboard_counts_reflect_resolution_accurately(self):
+        """Verify dashboard Total, Open Lost, Open Found, and Resolved counts stay accurate without double-counting."""
+        stats_start = database.get_statistics()
+        pin = "9988"
+
+        # Create 1 open lost and 1 open found item
+        lost_id = database.create_item(
+            'lost', 'Stats Lost Watch', 'Electronics', 'Pool',
+            '2026-10-28', 'Lost digital watch.', 'Owner', 'o@campus.edu', pin
+        )
+        found_id = database.create_item(
+            'found', 'Stats Found Keys', 'Student IDs & Keys', 'Quad',
+            '2026-10-28', 'Found room keys.', 'Finder', 'f@campus.edu', pin
+        )
+
+        stats_mid = database.get_statistics()
+        self.assertEqual(stats_mid['total'], stats_start['total'] + 2)
+        self.assertEqual(stats_mid['open_lost'], stats_start['open_lost'] + 1)
+        self.assertEqual(stats_mid['open_found'], stats_start['open_found'] + 1)
+        self.assertEqual(stats_mid['resolved'], stats_start['resolved'])
+
+        # Resolve the Lost item
+        database.update_item_status(lost_id, 'resolved')
+
+        stats_resolved = database.get_statistics()
+        self.assertEqual(stats_resolved['total'], stats_start['total'] + 2)
+        self.assertEqual(stats_resolved['open_lost'], stats_start['open_lost'])  # decremented by 1 back to start
+        self.assertEqual(stats_resolved['open_found'], stats_start['open_found'] + 1)
+        self.assertEqual(stats_resolved['resolved'], stats_start['resolved'] + 1)
+
+        # Invariant check: total == open_lost + open_found + resolved
+        self.assertEqual(
+            stats_resolved['total'],
+            stats_resolved['open_lost'] + stats_resolved['open_found'] + stats_resolved['resolved']
+        )
+
+        # Verify home page renders accurate counts
+        res_home = self.client.get('/')
+        html = res_home.data.decode('utf-8')
+        self.assertIn(f">{stats_resolved['total']}<", html)
+        self.assertIn(f">{stats_resolved['open_lost']}<", html)
+        self.assertIn(f">{stats_resolved['open_found']}<", html)
+        self.assertIn(f">{stats_resolved['resolved']}<", html)
+
+    # ------------------------------------------------------------------
+    # 49. Search and Category Filtering Within Resolved Records
+    # ------------------------------------------------------------------
+    def test_49_search_and_category_filtering_within_resolved_records(self):
+        """Verify searching and category filtering within the dedicated Resolved section."""
+        unique_token = f"ResToken_{uuid.uuid4().hex[:6]}"
+        pin = "1234"
+
+        # Create and resolve 2 items in different categories
+        book_id = database.create_item(
+            'lost', f'Organic Chemistry {unique_token}', 'Books & Stationery', 'Science Library',
+            '2026-10-28', 'Textbook with notes.', 'Chem Student', 'chem@campus.edu', pin
+        )
+        phone_id = database.create_item(
+            'found', f'Pixel Phone {unique_token}', 'Electronics', 'Bus Stop',
+            '2026-10-28', 'Black smartphone.', 'Transit', 'transit@campus.edu', pin
+        )
+
+        database.update_item_status(book_id, 'resolved')
+        database.update_item_status(phone_id, 'resolved')
+
+        # 1. Search within resolved items
+        res_search_book = self.client.get(f'/?q={unique_token}&status=resolved')
+        self.assertEqual(res_search_book.status_code, 200)
+        html_search = res_search_book.data.decode('utf-8')
+        self.assertIn(f'Organic Chemistry {unique_token}', html_search)
+        self.assertIn(f'Pixel Phone {unique_token}', html_search)
+
+        # 2. Filter by category within resolved items
+        res_cat_book = self.client.get(f'/?category=Books+%26+Stationery&status=resolved')
+        self.assertEqual(res_cat_book.status_code, 200)
+        html_cat = res_cat_book.data.decode('utf-8')
+        self.assertIn(f'Organic Chemistry {unique_token}', html_cat)
+        self.assertNotIn(f'Pixel Phone {unique_token}', html_cat)
+
+        # 3. Default active listings must NOT contain either resolved item
+        res_active = self.client.get(f'/?q={unique_token}')
+        self.assertEqual(res_active.status_code, 200)
+        html_active = res_active.data.decode('utf-8')
+        self.assertNotIn(f'Organic Chemistry {unique_token}', html_active)
+        self.assertNotIn(f'Pixel Phone {unique_token}', html_active)
+
+    # ------------------------------------------------------------------
+    # 50. Reopening Workflow Restores Item to Active Directory
+    # ------------------------------------------------------------------
+    def test_50_reopening_resolved_item_restores_it_to_active_listings(self):
+        """Verify reopening an item moves it from Resolved back into the active directory."""
+        suffix = uuid.uuid4().hex[:6]
+        item_title = f"Dorm Keycard {suffix}"
+        pin = "5544"
+
+        item_id = database.create_item(
+            'lost', item_title, 'Student IDs & Keys', 'Dining Hall',
+            '2026-10-28', 'Red lanyard keycard.', 'Student', 'dorm@campus.edu', pin
+        )
+
+        # Resolve item
+        database.update_item_status(item_id, 'resolved')
+        self.assertNotIn(item_title, self.client.get('/').data.decode('utf-8'))
+        self.assertIn(item_title, self.client.get('/?status=resolved').data.decode('utf-8'))
+
+        # Reopen item with authorized PIN
+        res_reopen = self.client.post(f'/items/{item_id}/status', data={
+            'pin': pin,
+            'status': 'open'
+        }, follow_redirects=True)
+        self.assertEqual(res_reopen.status_code, 200)
+        self.assertIn('OPEN', res_reopen.data.decode('utf-8'))
+
+        # Verify it has returned to active listings
+        self.assertIn(item_title, self.client.get('/').data.decode('utf-8'))
+        self.assertIn(item_title, self.client.get('/?type=lost').data.decode('utf-8'))
+
+        # Verify it has left the resolved section
+        self.assertNotIn(item_title, self.client.get('/?status=resolved').data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 51. Repeated Status Updates Handled Safely
+    # ------------------------------------------------------------------
+    def test_51_repeated_status_updates_handled_safely(self):
+        """Verify submitting the same status update twice handles safely without error or data corruption."""
+        pin = "6677"
+        item_id = database.create_item(
+            'found', 'Repeated Resolution Item', 'Other / Miscellaneous', 'Lawn',
+            '2026-10-28', 'Item for repeat testing.', 'Finder', 'finder@campus.edu', pin
+        )
+
+        # First resolution
+        res1 = self.client.post(f'/items/{item_id}/status', data={'pin': pin, 'status': 'resolved'}, follow_redirects=True)
+        self.assertEqual(res1.status_code, 200)
+
+        # Second resolution (already resolved)
+        res2 = self.client.post(f'/items/{item_id}/status', data={'pin': pin, 'status': 'resolved'}, follow_redirects=True)
+        self.assertEqual(res2.status_code, 200)
+        self.assertIn('already marked as RESOLVED', res2.data.decode('utf-8'))
+
+        # Record remains safely resolved
+        self.assertEqual(database.get_item_by_id(item_id)['status'], 'resolved')
+
+    # ------------------------------------------------------------------
+    # 52. Unauthorized Resolution Attempts Fail Safely
+    # ------------------------------------------------------------------
+    def test_52_unauthorized_resolution_attempts_fail_safely(self):
+        """Verify unauthorized status changes with wrong PIN fail and item remains active."""
+        item_id = database.create_item(
+            'lost', 'Protected Item Against Hack', 'Electronics', 'Classroom 4',
+            '2026-10-28', 'Secure item.', 'Owner', 'owner@campus.edu', '7890'
+        )
+
+        # Attempt with wrong PIN
+        res = self.client.post(f'/items/{item_id}/status', data={
+            'pin': '0000',
+            'status': 'resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('Incorrect Security PIN', res.data.decode('utf-8'))
+
+        # Item must remain open
+        record = database.get_item_by_id(item_id)
+        self.assertEqual(record['status'], 'open')
+
+        # Must still be visible on active homepage
+        res_home = self.client.get('/')
+        self.assertIn('Protected Item Against Hack', res_home.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 53. Retake / Change Options Markup and Reopen Camera Choice
+    # ------------------------------------------------------------------
+    def test_53_retake_options_markup_and_reopen_camera_choice(self):
+        """Verify Retake / Change markup provides choices for both reopening camera and browsing files."""
+        res = self.client.get('/items/new')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+
+        # Check Retake button and options menu
+        self.assertIn('id="retakeDropdownWrap"', html)
+        self.assertIn('id="btnRetakePhoto"', html)
+        self.assertIn('id="retakeOptionsMenu"', html)
+        self.assertIn('id="btnRetakeCamera"', html)
+        self.assertIn('Reopen Camera', html)
+        self.assertIn('id="btnRetakeGallery"', html)
+        self.assertIn('Browse Files', html)
+        self.assertIn('id="btnRemovePhoto"', html)
+
+    # ------------------------------------------------------------------
+    # 54. Photo Upload with Both File Inputs Sent (Browser Emulation)
+    # ------------------------------------------------------------------
+    def test_54_photo_upload_with_both_file_inputs_sent(self):
+        """Verify uploading when form submits both empty camera input and populated file input."""
+        suffix = uuid.uuid4().hex[:6]
+        img_buf = self._create_test_image_bytes(format='PNG', size=(150, 150), color='blue')
+
+        payload = {
+            'item_type': 'found',
+            'title': f'Found Calculator {suffix}',
+            'category': 'Electronics',
+            'location': 'Math Hall 101',
+            'event_date': datetime.date.today().strftime('%Y-%m-%d'),
+            'description': 'TI-84 graphic calculator found on desk.',
+            'poster_name': f'Student {suffix}',
+            'poster_contact': f'student.{suffix}@campus.edu',
+            'pin': '7788',
+            'photo_camera': (io.BytesIO(b''), ''),  # empty camera input sent by browser
+            'photo_file': (img_buf, 'calc.png')     # populated file input
+        }
+
+        res = self.client.post('/items/new', data=payload, content_type='multipart/form-data', follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        item_id = int(res.headers['Location'].split('/')[-1])
+
+        item = database.get_item_by_id(item_id)
+        self.assertIsNotNone(item['image_filename'])
+        self.assertTrue(item['image_filename'].endswith('.png'))
+
+        # Verify image file exists in upload directory
+        upload_path = os.path.join(TEST_UPLOAD_DIR, item['image_filename'])
+        self.assertTrue(os.path.isfile(upload_path))
+
+    # ------------------------------------------------------------------
+    # 55. Empty (0-byte) Photo File Handled Safely
+    # ------------------------------------------------------------------
+    def test_55_empty_zero_byte_photo_handled_safely(self):
+        """Verify submitting a 0-byte file with an image filename does not create an orphaned file."""
+        suffix = uuid.uuid4().hex[:6]
+        empty_buf = io.BytesIO(b'')
+
+        payload = {
+            'item_type': 'lost',
+            'title': f'Empty Photo Item {suffix}',
+            'category': 'Books & Stationery',
+            'location': 'Library 1F',
+            'event_date': datetime.date.today().strftime('%Y-%m-%d'),
+            'description': 'Item submitted with an empty photo file.',
+            'poster_name': f'Student {suffix}',
+            'poster_contact': f'student.{suffix}@campus.edu',
+            'pin': '4321',
+            'photo_file': (empty_buf, 'empty_photo.jpg')
+        }
+
+        res = self.client.post('/items/new', data=payload, content_type='multipart/form-data', follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        item_id = int(res.headers['Location'].split('/')[-1])
+
+        item = database.get_item_by_id(item_id)
+        # Empty file should safely result in no image stored
+        self.assertIsNone(item['image_filename'])
+
+    # ------------------------------------------------------------------
+    # 56. Image Persistence Across Simulated Server Restart
+    # ------------------------------------------------------------------
+    def test_56_image_persistence_across_simulated_restart(self):
+        """Verify that uploaded images remain persistently accessible across simulated client/server recreation."""
+        suffix = uuid.uuid4().hex[:6]
+        img_buf = self._create_test_image_bytes(format='JPEG', size=(250, 250), color='green')
+
+        payload = {
+            'item_type': 'found',
+            'title': f'Green Umbrella {suffix}',
+            'category': 'Clothing & Accessories',
+            'location': 'Student Union Lobby',
+            'event_date': datetime.date.today().strftime('%Y-%m-%d'),
+            'description': 'Green compact umbrella found near coat rack.',
+            'poster_name': f'Student {suffix}',
+            'poster_contact': f'student.{suffix}@campus.edu',
+            'pin': '6543',
+            'photo_file': (img_buf, 'umbrella.jpg')
+        }
+
+        res = self.client.post('/items/new', data=payload, content_type='multipart/form-data', follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        item_id = int(res.headers['Location'].split('/')[-1])
+
+        # Simulate fresh client after server restart
+        new_client = self.app.test_client()
+
+        # 1. Detail page loads and contains image tag
+        res_detail = new_client.get(f'/items/{item_id}')
+        self.assertEqual(res_detail.status_code, 200)
+        html_detail = res_detail.data.decode('utf-8')
+        item = database.get_item_by_id(item_id)
+        self.assertIn(f'/uploads/{item["image_filename"]}', html_detail)
+        self.assertNotIn('No photo uploaded', html_detail)
+
+        # 2. Image endpoint serves actual bytes successfully with 200 OK
+        res_img = new_client.get(f'/uploads/{item["image_filename"]}')
+        self.assertEqual(res_img.status_code, 200)
+        self.assertGreater(len(res_img.data), 0)
+
+        # 3. Homepage listing card displays the image
+        res_home = new_client.get('/')
+        self.assertEqual(res_home.status_code, 200)
+        html_home = res_home.data.decode('utf-8')
+        self.assertIn(f'/uploads/{item["image_filename"]}', html_home)
+
+    # ------------------------------------------------------------------
+    # 57. Signup Page Rendering & Glassmorphism Markup
+    # ------------------------------------------------------------------
+    def test_57_signup_page_rendering(self):
+        """Verify /signup renders glassmorphism card, steps, and Google option."""
+        res = self.client.get('/signup')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+
+        self.assertIn('Create Account', html)
+        self.assertIn('CampusConnect', html)
+        self.assertIn('id="signupForm"', html)
+        self.assertIn('id="signupName"', html)
+        self.assertIn('id="signupEmail"', html)
+        self.assertIn('id="signupPassword"', html)
+        self.assertIn('id="signupConfirmPassword"', html)
+        self.assertIn('btn-glass-oauth', html)
+        self.assertIn('id="stepIndicator1"', html)
+        self.assertIn('id="stepIndicator2"', html)
+        self.assertIn('Sign in', html)
+
+    # ------------------------------------------------------------------
+    # 58. Signup Success & Session Establishment
+    # ------------------------------------------------------------------
+    def test_58_signup_success_and_session(self):
+        """Verify successful signup hashes password, creates user in DB, and establishes session."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"student_{suffix}@campus.edu"
+        password = "SecurePassword123!"
+
+        payload = {
+            'name': f"Alex {suffix}",
+            'email': email,
+            'password': password,
+            'confirm_password': password
+        }
+
+        res = self.client.post('/signup', data=payload, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        self.assertIn(f"Welcome to CampusConnect, Alex {suffix}!", html)
+
+        # Verify database record and password hashing
+        user = database.get_user_by_email(email)
+        self.assertIsNotNone(user)
+        self.assertEqual(user['name'], f"Alex {suffix}")
+        self.assertNotEqual(user['password_hash'], password)
+        self.assertTrue(database.verify_user_password(user, password))
+
+    # ------------------------------------------------------------------
+    # 59. Signup Duplicate Email Rejected Safely
+    # ------------------------------------------------------------------
+    def test_59_signup_duplicate_email_rejected(self):
+        """Verify registering with an existing email is rejected without throwing unhandled exceptions."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"dup_{suffix}@campus.edu"
+        database.create_user(email=email, name="First User", password_plain="Password123!")
+
+        payload = {
+            'name': "Second User",
+            'email': email,
+            'password': "DifferentPassword456!",
+            'confirm_password': "DifferentPassword456!"
+        }
+
+        res = self.client.post('/signup', data=payload, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        self.assertIn("already exists", html)
+
+    # ------------------------------------------------------------------
+    # 60. Signup Server-Side Validation Rules
+    # ------------------------------------------------------------------
+    def test_60_signup_validation_rules(self):
+        """Verify server rejects invalid names, malformed emails, short passwords, and mismatched confirms."""
+        # 1. Short name
+        res1 = self.client.post('/signup', data={
+            'name': 'A',
+            'email': 'valid@campus.edu',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertIn("Name must be between 2 and 60 characters", res1.data.decode('utf-8'))
+
+        # 2. Malformed email
+        res2 = self.client.post('/signup', data={
+            'name': 'Valid Name',
+            'email': 'not-an-email',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertIn("valid email address", res2.data.decode('utf-8'))
+
+        # 3. Short password (< 8 chars)
+        res3 = self.client.post('/signup', data={
+            'name': 'Valid Name',
+            'email': 'valid@campus.edu',
+            'password': 'short',
+            'confirm_password': 'short'
+        }, follow_redirects=True)
+        self.assertIn("Password must be between 8 and 128 characters", res3.data.decode('utf-8'))
+
+        # 4. Mismatched passwords
+        res4 = self.client.post('/signup', data={
+            'name': 'Valid Name',
+            'email': 'valid@campus.edu',
+            'password': 'Password123!',
+            'confirm_password': 'MismatchPassword!'
+        }, follow_redirects=True)
+        self.assertIn("Passwords do not match", res4.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 61. Login Page Rendering & Controls
+    # ------------------------------------------------------------------
+    def test_61_login_page_rendering(self):
+        """Verify /login renders glassmorphism layout, email and password inputs, and Google button."""
+        res = self.client.get('/login')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+
+        self.assertIn('Welcome Back', html)
+        self.assertIn('CampusConnect', html)
+        self.assertIn('id="loginEmail"', html)
+        self.assertIn('id="loginPassword"', html)
+        self.assertIn('id="togglePasswordBtn"', html)
+        self.assertIn('btn-glass-oauth', html)
+        self.assertIn('Create an account', html)
+
+    # ------------------------------------------------------------------
+    # 62. Login Success & Session Establishment
+    # ------------------------------------------------------------------
+    def test_62_login_success_and_session(self):
+        """Verify user can authenticate with valid credentials and establish session."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"user_{suffix}@campus.edu"
+        password = "ValidUserPassword123!"
+        database.create_user(email=email, name=f"Morgan {suffix}", password_plain=password)
+
+        res = self.client.post('/login', data={
+            'email': email,
+            'password': password
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        self.assertIn(f"Welcome back, Morgan {suffix}!", html)
+
+        # Verify session state
+        with self.client.session_transaction() as sess:
+            self.assertIsNotNone(sess.get('user_id'))
+            self.assertEqual(sess.get('user_email'), email)
+
+    # ------------------------------------------------------------------
+    # 63. Login Invalid Credentials Rejection
+    # ------------------------------------------------------------------
+    def test_63_login_invalid_credentials(self):
+        """Verify invalid credentials return safe error message without exposing account existence."""
+        # Non-existent email
+        res1 = self.client.post('/login', data={
+            'email': 'nonexistent@campus.edu',
+            'password': 'AnyPassword123!'
+        }, follow_redirects=True)
+        self.assertIn("Invalid email or password", res1.data.decode('utf-8'))
+
+        # Existing email with wrong password
+        suffix = uuid.uuid4().hex[:6]
+        email = f"real_{suffix}@campus.edu"
+        database.create_user(email=email, name="Real User", password_plain="RightPassword123!")
+
+        res2 = self.client.post('/login', data={
+            'email': email,
+            'password': 'WrongPassword999!'
+        }, follow_redirects=True)
+        self.assertIn("Invalid email or password", res2.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 64. Logout Clears Session Safely
+    # ------------------------------------------------------------------
+    def test_64_logout_clears_session(self):
+        """Verify /logout clears user credentials from session and redirects with notification."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"logout_{suffix}@campus.edu"
+        database.create_user(email=email, name="Logout Test", password_plain="Password123!")
+
+        # Log in
+        self.client.post('/login', data={'email': email, 'password': 'Password123!'})
+        with self.client.session_transaction() as sess:
+            self.assertIsNotNone(sess.get('user_id'))
+
+        # Log out
+        res = self.client.get('/logout', follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("signed out safely", res.data.decode('utf-8'))
+
+        # Verify session is empty
+        with self.client.session_transaction() as sess:
+            self.assertIsNone(sess.get('user_id'))
+
+    # ------------------------------------------------------------------
+    # 65. Open Redirect Prevention on Login and Signup
+    # ------------------------------------------------------------------
+    def test_65_safe_redirect_prevents_open_redirect(self):
+        """Verify malicious external next URLs are stripped and redirected safely to index."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"redirect_{suffix}@campus.edu"
+        database.create_user(email=email, name="Redirect Tester", password_plain="Password123!")
+
+        # Attempt login with external next URL
+        res = self.client.post('/login?next=https://malicious-site.com', data={
+            'email': email,
+            'password': 'Password123!'
+        }, follow_redirects=False)
+
+        self.assertEqual(res.status_code, 302)
+        # Location header must not point to malicious-site.com
+        self.assertFalse(res.headers['Location'].startswith('https://malicious-site.com'))
+        self.assertEqual(res.headers['Location'], '/')
+
+    # ------------------------------------------------------------------
+    # 66. Google OAuth Unconfigured Handling
+    # ------------------------------------------------------------------
+    def test_66_google_oauth_unconfigured_graceful_handling(self):
+        """Verify accessing /login/google without credentials displays guidance message and does not crash."""
+        from unittest.mock import patch
+        with patch('app.is_google_oauth_configured', return_value=False):
+            res = self.client.get('/login/google', follow_redirects=True)
+            self.assertEqual(res.status_code, 200)
+            html = res.data.decode('utf-8')
+            self.assertIn("Google Sign-In is not currently configured", html)
+
+    # ------------------------------------------------------------------
+    # 67. Google OAuth State Verification Guard
+    # ------------------------------------------------------------------
+    def test_67_google_oauth_callback_state_verification(self):
+        """Verify /login/google/callback rejects requests with missing or mismatched OAuth state."""
+        res = self.client.get('/login/google/callback?code=mock_code&state=invalid_state', follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("state verification failed", res.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 68. Authenticated User Prefills Submit Form
+    # ------------------------------------------------------------------
+    def test_68_authenticated_user_prefills_submit_form(self):
+        """Verify logged-in user visiting /items/new has their name and email pre-filled."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"poster_{suffix}@campus.edu"
+        name = f"Poster {suffix}"
+        database.create_user(email=email, name=name, password_plain="Password123!")
+
+        self.client.post('/login', data={'email': email, 'password': 'Password123!'})
+
+        res = self.client.get('/items/new')
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        self.assertIn(f'value="{name}"', html)
+        self.assertIn(f'value="{email}"', html)
+
+    # ------------------------------------------------------------------
+    # 69. Email Validation Rejects Whitespace-Padded and Malformed Emails
+    # ------------------------------------------------------------------
+    def test_69_email_validation_rejects_whitespace_and_malformed(self):
+        """Verify signup rejects emails with leading/trailing spaces, missing domains, or invalid characters."""
+        # Whitespace-padded email
+        res1 = self.client.post('/signup', data={
+            'name': 'Padded User',
+            'email': '  padded@campus.edu  ',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertIn("properly formatted email address", res1.data.decode('utf-8'))
+
+        # Trailing space email
+        res2 = self.client.post('/signup', data={
+            'name': 'Trailing Space',
+            'email': 'trailing@campus.edu ',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertIn("properly formatted email address", res2.data.decode('utf-8'))
+
+        # Malformed email without TLD
+        res3 = self.client.post('/signup', data={
+            'name': 'No TLD',
+            'email': 'notld@campus',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertIn("properly formatted email address", res3.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 70. Email Verification Token Lifecycle & Single-Use Enforcement
+    # ------------------------------------------------------------------
+    def test_70_email_verification_token_lifecycle(self):
+        """Verify newly created account starts unverified, can be verified via token, and token cannot be reused."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"verify_{suffix}@campus.edu"
+        password = "Password123!"
+
+        res = self.client.post('/signup', data={
+            'name': f"Verify {suffix}",
+            'email': email,
+            'password': password,
+            'confirm_password': password
+        }, follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+
+        user = database.get_user_by_email(email)
+        self.assertIsNotNone(user)
+        self.assertEqual(user['is_verified'], 0)
+        self.assertIsNotNone(user['verification_token'])
+
+        token = user['verification_token']
+
+        # Access verification link
+        verify_res = self.client.get(f'/verify-email/{token}', follow_redirects=True)
+        self.assertEqual(verify_res.status_code, 200)
+        html = verify_res.data.decode('utf-8')
+        self.assertIn("Email verified successfully", html)
+
+        # Check DB state
+        updated_user = database.get_user_by_email(email)
+        self.assertEqual(updated_user['is_verified'], 1)
+        self.assertIsNone(updated_user['verification_token'])
+
+        # Attempt to reuse the token
+        reuse_res = self.client.get(f'/verify-email/{token}', follow_redirects=True)
+        self.assertIn("Invalid or already used verification token", reuse_res.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 71. Expired Email Verification Token Rejection
+    # ------------------------------------------------------------------
+    def test_71_expired_email_verification_token(self):
+        """Verify that an expired verification token cannot verify an account."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"expired_{suffix}@campus.edu"
+        past_time = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)).strftime('%Y-%m-%d %H:%M:%S')
+
+        user_id = database.create_user(
+            email=email,
+            name="Expired Tester",
+            password_plain="Password123!",
+            is_verified=0,
+            verification_token=f"expired_token_{suffix}",
+            token_expiry=past_time
+        )
+
+        res = self.client.get(f'/verify-email/expired_token_{suffix}', follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("expired", res.data.decode('utf-8'))
+
+        user = database.get_user_by_id(user_id)
+        self.assertEqual(user['is_verified'], 0)
+
+    # ------------------------------------------------------------------
+    # 72. Resend Verification Token for Unverified User
+    # ------------------------------------------------------------------
+    def test_72_resend_verification_token(self):
+        """Verify unverified logged-in user can request a new verification token."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"resend_{suffix}@campus.edu"
+        user_id = database.create_user(
+            email=email,
+            name="Resend User",
+            password_plain="Password123!",
+            is_verified=0,
+            verification_token="initial_token_123",
+            token_expiry="2026-01-01 00:00:00"
+        )
+
+        # Log in
+        self.client.post('/login', data={'email': email, 'password': 'Password123!'})
+
+        res = self.client.post('/resend-verification', follow_redirects=True)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("fresh verification link", res.data.decode('utf-8'))
+
+        updated_user = database.get_user_by_id(user_id)
+        self.assertNotEqual(updated_user['verification_token'], "initial_token_123")
+
+    # ------------------------------------------------------------------
+    # 73. Footer Hidden on Login & Signup Pages, Present Elsewhere
+    # ------------------------------------------------------------------
+    def test_73_footer_hidden_on_login_and_signup(self):
+        """Verify the global footer is suppressed on /login and /signup, but rendered on other pages."""
+        # Login page: No footer
+        res_login = self.client.get('/login')
+        self.assertNotIn('<footer class="footer">', res_login.data.decode('utf-8'))
+
+        # Signup page: No footer
+        res_signup = self.client.get('/signup')
+        self.assertNotIn('<footer class="footer">', res_signup.data.decode('utf-8'))
+
+        # Index page: Footer present
+        res_index = self.client.get('/')
+        self.assertIn('<footer class="footer">', res_index.data.decode('utf-8'))
+
+        # About page: Footer present
+        res_about = self.client.get('/about')
+        self.assertIn('<footer class="footer">', res_about.data.decode('utf-8'))
+
+    # ------------------------------------------------------------------
+    # 74. Navbar Circular Profile Avatar When Authenticated
+    # ------------------------------------------------------------------
+    def test_74_navbar_circular_profile_avatar(self):
+        """Verify navbar displays circular initials avatar and profile link for logged-in user, and Sign In/Sign Up when logged out."""
+        # Logged out
+        res_out = self.client.get('/')
+        html_out = res_out.data.decode('utf-8')
+        self.assertIn('Sign In', html_out)
+        self.assertIn('Sign Up', html_out)
+        self.assertNotIn('nav-profile-avatar-btn', html_out)
+
+        # Log in
+        suffix = uuid.uuid4().hex[:6]
+        email = f"avatar_{suffix}@campus.edu"
+        database.create_user(email=email, name=f"Taylor Swift", password_plain="Password123!")
+        self.client.post('/login', data={'email': email, 'password': 'Password123!'})
+
+        res_in = self.client.get('/')
+        html_in = res_in.data.decode('utf-8')
+        self.assertIn('nav-profile-avatar-btn', html_in)
+        self.assertIn('nav-profile-initials', html_in)
+        self.assertIn('TS', html_in)
+        self.assertIn('/profile', html_in)
+
+    # ------------------------------------------------------------------
+    # 75. Profile Protection, Data Isolation & Reports View
+    # ------------------------------------------------------------------
+    def test_75_profile_protection_and_user_reports_isolation(self):
+        """Verify unauthenticated user cannot access /profile and authenticated user only sees their own reports."""
+        # Unauthenticated redirect
+        res_unauth = self.client.get('/profile', follow_redirects=False)
+        self.assertEqual(res_unauth.status_code, 302)
+        self.assertIn('/login', res_unauth.headers['Location'])
+
+        # User A setup
+        suffix_a = uuid.uuid4().hex[:6]
+        email_a = f"usera_{suffix_a}@campus.edu"
+        user_a_id = database.create_user(email=email_a, name="User Alpha", password_plain="Password123!")
+
+        # User B setup
+        suffix_b = uuid.uuid4().hex[:6]
+        email_b = f"userb_{suffix_b}@campus.edu"
+        user_b_id = database.create_user(email=email_b, name="User Beta", password_plain="Password123!")
+
+        # Create item for User A
+        database.create_item(
+            item_type='lost',
+            title=f"Alpha Laptop {suffix_a}",
+            category='Electronics',
+            location='Library 2F',
+            event_date='2026-10-25',
+            description='Silver MacBook',
+            poster_name='User Alpha',
+            poster_contact=email_a,
+            pin_plain='1234',
+            user_id=user_a_id
+        )
+
+        # Create item for User B
+        database.create_item(
+            item_type='found',
+            title=f"Beta Umbrella {suffix_b}",
+            category='Other / Miscellaneous',
+            location='Student Center',
+            event_date='2026-10-26',
+            description='Blue Umbrella',
+            poster_name='User Beta',
+            poster_contact=email_b,
+            pin_plain='5678',
+            user_id=user_b_id
+        )
+
+        # Log in as User A
+        self.client.post('/login', data={'email': email_a, 'password': 'Password123!'})
+        res_prof_a = self.client.get('/profile')
+        self.assertEqual(res_prof_a.status_code, 200)
+        html_a = res_prof_a.data.decode('utf-8')
+
+        # User A sees their own item, but NOT User B's item
+        self.assertIn(f"Alpha Laptop {suffix_a}", html_a)
+        self.assertNotIn(f"Beta Umbrella {suffix_b}", html_a)
+        self.assertIn(email_a, html_a)
+        self.assertIn("User Alpha", html_a)
+
+    # ------------------------------------------------------------------
+    # 76. Update User Profile Name
+    # ------------------------------------------------------------------
+    def test_76_profile_update_display_name(self):
+        """Verify user can update their display name from /profile."""
+        suffix = uuid.uuid4().hex[:6]
+        email = f"editname_{suffix}@campus.edu"
+        user_id = database.create_user(email=email, name="Old Name", password_plain="Password123!")
+
+        self.client.post('/login', data={'email': email, 'password': 'Password123!'})
+
+        # Submit name update
+        res = self.client.post('/profile', data={
+            'action': 'update_profile',
+            'name': 'Updated New Name'
+        }, follow_redirects=True)
+
+        self.assertEqual(res.status_code, 200)
+        html = res.data.decode('utf-8')
+        self.assertIn("Updated New Name", html)
+
+        # Check DB
+        user = database.get_user_by_id(user_id)
+        self.assertEqual(user['name'], "Updated New Name")
+
+    # ------------------------------------------------------------------
+    # 77. Google OAuth Does NOT Auto-Link Password Account
+    # ------------------------------------------------------------------
+    def test_77_google_oauth_no_auto_link_with_password_account(self):
+        """Verify Google OAuth rejects auto-linking when an account already exists with password auth."""
+        from unittest.mock import patch, MagicMock
+
+        suffix = uuid.uuid4().hex[:6]
+        email = f"pwd_user_{suffix}@campus.edu"
+        database.create_user(email=email, name="Password User", password_plain="Password123!")
+
+        with self.client.session_transaction() as sess:
+            sess['oauth_state'] = 'test_mock_state'
+
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            mock_token_resp = MagicMock()
+            mock_token_resp.read.return_value = b'{"access_token": "mock_google_token"}'
+            mock_token_resp.__enter__.return_value = mock_token_resp
+
+            mock_userinfo_resp = MagicMock()
+            mock_userinfo_resp.read.return_value = (
+                f'{{"sub": "google_sub_{suffix}", "email": "{email}", "name": "Google User", "email_verified": true}}'.encode('utf-8')
+            )
+            mock_userinfo_resp.__enter__.return_value = mock_userinfo_resp
+
+            mock_urlopen.side_effect = [mock_token_resp, mock_userinfo_resp]
+
+            with patch('app.is_google_oauth_configured', return_value=True):
+                res = self.client.get('/login/google/callback?code=mock_code&state=test_mock_state', follow_redirects=True)
+                self.assertEqual(res.status_code, 200)
+                html = res.data.decode('utf-8')
+                self.assertIn("already exists using password authentication", html)
+                with self.client.session_transaction() as sess:
+                    self.assertIsNone(sess.get('user_id'))
+
+    # ------------------------------------------------------------------
+    # 78. Google OAuth Creates New Verified User
+    # ------------------------------------------------------------------
+    def test_78_google_oauth_creates_new_verified_user(self):
+        """Verify Google OAuth creates a new account with is_verified=1 when email_verified is true."""
+        from unittest.mock import patch, MagicMock
+
+        suffix = uuid.uuid4().hex[:6]
+        email = f"new_google_{suffix}@campus.edu"
+
+        with self.client.session_transaction() as sess:
+            sess['oauth_state'] = 'test_state_78'
+
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            mock_token_resp = MagicMock()
+            mock_token_resp.read.return_value = b'{"access_token": "mock_google_token"}'
+            mock_token_resp.__enter__.return_value = mock_token_resp
+
+            mock_userinfo_resp = MagicMock()
+            mock_userinfo_resp.read.return_value = (
+                f'{{"sub": "google_sub_{suffix}", "email": "{email}", "name": "New Google User", "email_verified": true}}'.encode('utf-8')
+            )
+            mock_userinfo_resp.__enter__.return_value = mock_userinfo_resp
+
+            mock_urlopen.side_effect = [mock_token_resp, mock_userinfo_resp]
+
+            with patch('app.is_google_oauth_configured', return_value=True):
+                res = self.client.get('/login/google/callback?code=mock_code&state=test_state_78', follow_redirects=True)
+                self.assertEqual(res.status_code, 200)
+
+                user = database.get_user_by_email(email)
+                self.assertIsNotNone(user)
+                self.assertEqual(user['is_verified'], 1)
+                self.assertEqual(user['google_id'], f"google_sub_{suffix}")
+                self.assertIsNone(user['password_hash'])
+
+    # ------------------------------------------------------------------
+    # 79. Google OAuth HTTPError 401 Handling in Development Mode
+    # ------------------------------------------------------------------
+    def test_79_google_oauth_token_exchange_http_error_dev_mode(self):
+        """Verify HTTPError during token exchange displays parsed OAuth error description in development."""
+        import urllib.error
+        from unittest.mock import patch
+
+        with self.client.session_transaction() as sess:
+            sess['oauth_state'] = 'test_state_79'
+            sess['oauth_redirect_uri'] = 'http://127.0.0.1:5000/login/google/callback'
+
+        error_json = b'{"error": "invalid_client", "error_description": "The provided client secret is invalid."}'
+        fp = io.BytesIO(error_json)
+        http_err = urllib.error.HTTPError(
+            url="https://oauth2.googleapis.com/token",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},
+            fp=fp
+        )
+
+        with patch('urllib.request.urlopen', side_effect=http_err):
+            with patch('app.is_google_oauth_configured', return_value=True):
+                with patch('app.is_production', False):
+                    res = self.client.get('/login/google/callback?code=mock_code&state=test_state_79', follow_redirects=True)
+                    self.assertEqual(res.status_code, 200)
+                    html = res.data.decode('utf-8')
+                    self.assertIn("HTTP 401", html)
+                    self.assertIn("invalid_client", html)
+                    self.assertIn("The provided client secret is invalid", html)
+                    # Verify no raw authorization codes or mock credentials leaked
+                    self.assertNotIn("mock_code", html)
+
+    # ------------------------------------------------------------------
+    # 80. Google OAuth HTTPError Handling in Production Mode
+    # ------------------------------------------------------------------
+    def test_80_google_oauth_token_exchange_http_error_prod_mode(self):
+        """Verify HTTPError in production mode displays a generic message without exposing internal details."""
+        import urllib.error
+        from unittest.mock import patch
+
+        with self.client.session_transaction() as sess:
+            sess['oauth_state'] = 'test_state_80'
+
+        error_json = b'{"error": "invalid_client", "error_description": "The provided client secret is invalid."}'
+        fp = io.BytesIO(error_json)
+        http_err = urllib.error.HTTPError(
+            url="https://oauth2.googleapis.com/token",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},
+            fp=fp
+        )
+
+        with patch('urllib.request.urlopen', side_effect=http_err):
+            with patch('app.is_google_oauth_configured', return_value=True):
+                with patch('app.is_production', True):
+                    res = self.client.get('/login/google/callback?code=mock_code&state=test_state_80', follow_redirects=True)
+                    self.assertEqual(res.status_code, 200)
+                    html = res.data.decode('utf-8')
+                    self.assertIn("Google sign-in could not be completed", html)
+                    self.assertNotIn("invalid_client", html)
+                    self.assertNotIn("client secret", html)
+
+    # ------------------------------------------------------------------
+    # 81. Google OAuth Redirect URI Exact Matching & Session Persistence
+    # ------------------------------------------------------------------
+    def test_81_google_oauth_redirect_uri_exact_matching(self):
+        """Verify redirect_uri generated in /login/google is recorded and reused in callback."""
+        from unittest.mock import patch
+
+        with patch('app.is_google_oauth_configured', return_value=True):
+            res = self.client.get('/login/google?next=/items/new', follow_redirects=False)
+            self.assertEqual(res.status_code, 302)
+            with self.client.session_transaction() as sess:
+                stored_redirect = sess.get('oauth_redirect_uri')
+                self.assertIsNotNone(stored_redirect)
+                self.assertTrue(stored_redirect.endswith('/login/google/callback'))
+                self.assertEqual(sess.get('oauth_next'), '/items/new')
+
+    # ------------------------------------------------------------------
+    # 82. Credential Quote and Whitespace Stripping Helper
+    # ------------------------------------------------------------------
+    def test_82_clean_oauth_credential_helper(self):
+        """Verify clean_oauth_credential defensively strips quotes, spaces, and newlines."""
+        import app as campus_app
+        self.assertEqual(campus_app.clean_oauth_credential('  GOCSPX-abc123  \r\n'), 'GOCSPX-abc123')
+        self.assertEqual(campus_app.clean_oauth_credential('"GOCSPX-quoted"'), 'GOCSPX-quoted')
+        self.assertEqual(campus_app.clean_oauth_credential("'GOCSPX-single'"), 'GOCSPX-single')
+        self.assertEqual(campus_app.clean_oauth_credential(None), '')
+
+    # ------------------------------------------------------------------
+    # 83. Notifications Database Table & Repeatable Migration
+    # ------------------------------------------------------------------
+    def test_83_notifications_db_table_and_repeatable_migration(self):
+        """Verify notifications table schema, index definitions, and repeatable migration."""
+        conn = database.get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(notifications)")
+            columns = {row['name']: row['type'].upper() for row in cursor.fetchall()}
+            self.assertIn('id', columns)
+            self.assertIn('user_id', columns)
+            self.assertIn('notification_type', columns)
+            self.assertIn('title', columns)
+            self.assertIn('message', columns)
+            self.assertIn('target_url', columns)
+            self.assertIn('is_read', columns)
+            self.assertIn('created_at', columns)
+
+            # Repeatable migration check
+            applied = database.migrate_db()
+            self.assertFalse(applied)
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
+    # 84. Notifications Database Helpers CRUD
+    # ------------------------------------------------------------------
+    def test_84_notifications_database_helpers_crud(self):
+        """Verify creation, fetching, reading, counting, and deleting notifications via helpers."""
+        user_id = database.create_user(
+            email="notif_helper@campus.edu",
+            name="Notif User",
+            password_plain="Password123!",
+            is_verified=1
+        )
+
+        # Create notifications
+        n1 = database.create_notification(
+            user_id=user_id,
+            notification_type="welcome",
+            title="Welcome!",
+            message="Welcome to CampusConnect.",
+            target_url="/profile"
+        )
+        n2 = database.create_notification(
+            user_id=user_id,
+            notification_type="inquiry_received",
+            title="New Inquiry",
+            message="Someone messaged about your item.",
+            target_url="/items/1#contactSection"
+        )
+        self.assertIsNotNone(n1)
+        self.assertIsNotNone(n2)
+
+        # Count unread
+        self.assertEqual(database.get_unread_notification_count(user_id), 2)
+
+        # Fetch notifications
+        all_notifs = database.get_notifications_for_user(user_id)
+        self.assertEqual(len(all_notifs), 2)
+        self.assertEqual(all_notifs[0]['id'], n2)  # newest first
+
+        # Mark single as read
+        ok = database.mark_notification_as_read(n2, user_id)
+        self.assertTrue(ok)
+        self.assertEqual(database.get_unread_notification_count(user_id), 1)
+
+        unread_only = database.get_notifications_for_user(user_id, unread_only=True)
+        self.assertEqual(len(unread_only), 1)
+        self.assertEqual(unread_only[0]['id'], n1)
+
+        # Mark all as read
+        marked_count = database.mark_all_notifications_as_read(user_id)
+        self.assertEqual(marked_count, 1)
+        self.assertEqual(database.get_unread_notification_count(user_id), 0)
+
+        # Delete notification
+        deleted = database.delete_notification(n1, user_id)
+        self.assertTrue(deleted)
+        self.assertEqual(len(database.get_notifications_for_user(user_id)), 1)
+
+    # ------------------------------------------------------------------
+    # 85. User Isolation & Security Protections
+    # ------------------------------------------------------------------
+    def test_85_notifications_user_isolation(self):
+        """Verify strict isolation between User A and User B notifications."""
+        user_a = database.create_user(email="alice_notif@campus.edu", name="Alice", password_plain="Password123!")
+        user_b = database.create_user(email="bob_notif@campus.edu", name="Bob", password_plain="Password123!")
+
+        notif_a = database.create_notification(user_a, "welcome", "For Alice", "Alice's secret message")
+        notif_b = database.create_notification(user_b, "welcome", "For Bob", "Bob's private message")
+
+        # User B cannot mark User A's notification as read
+        ok = database.mark_notification_as_read(notif_a, user_b)
+        self.assertFalse(ok)
+        self.assertEqual(database.get_unread_notification_count(user_a), 1)
+
+        # User B cannot delete User A's notification
+        del_ok = database.delete_notification(notif_a, user_b)
+        self.assertFalse(del_ok)
+        self.assertIsNotNone(database.get_notification_by_id(notif_a))
+
+        # Enforced check in get_notification_by_id
+        self.assertIsNone(database.get_notification_by_id(notif_a, user_id=user_b))
+        self.assertIsNotNone(database.get_notification_by_id(notif_a, user_id=user_a))
+
+    # ------------------------------------------------------------------
+    # 86. Item Owner Resolution Helper
+    # ------------------------------------------------------------------
+    def test_86_get_owner_user_id_for_item(self):
+        """Verify resolving registered user ID from item.user_id or poster_contact match."""
+        user_id = database.create_user(email="owner_res@campus.edu", name="Owner", password_plain="Password123!")
+
+        # Case 1: Item created with explicit user_id
+        item1_id = database.create_item(
+            'lost', 'My Laptop', 'Electronics', 'Library', '2026-10-29',
+            'Silver laptop', 'Owner', 'owner_res@campus.edu', '1234',
+            user_id=user_id
+        )
+        item1 = database.get_item_by_id(item1_id)
+        self.assertEqual(database.get_owner_user_id_for_item(item1), user_id)
+
+        # Case 2: Legacy or guest item with user_id=None, but matching registered email
+        item2_id = database.create_item(
+            'lost', 'My Umbrella', 'Other / Miscellaneous', 'Dining', '2026-10-29',
+            'Blue umbrella', 'Owner', 'owner_res@campus.edu', '1234',
+            user_id=None
+        )
+        item2 = database.get_item_by_id(item2_id)
+        self.assertEqual(database.get_owner_user_id_for_item(item2), user_id)
+
+        # Case 3: Anonymous post with unmatched contact info
+        item3_id = database.create_item(
+            'found', 'Anonymous Keys', 'Student IDs & Keys', 'Gym', '2026-10-29',
+            'Room keys', 'Stranger', 'stranger_unknown@example.com', '1234',
+            user_id=None
+        )
+        item3 = database.get_item_by_id(item3_id)
+        self.assertIsNone(database.get_owner_user_id_for_item(item3))
+
+    # ------------------------------------------------------------------
+    # 87. Notifications Page Authentication Enforcement
+    # ------------------------------------------------------------------
+    def test_87_notifications_page_unauthenticated_redirect(self):
+        """Verify unauthenticated requests to /notifications redirect to /login."""
+        res = self.client.get('/notifications', follow_redirects=False)
+        self.assertEqual(res.status_code, 302)
+        self.assertIn('/login', res.headers.get('Location', ''))
+
+    # ------------------------------------------------------------------
+    # 88. Notifications Page Authenticated & Filter Tabs
+    # ------------------------------------------------------------------
+    def test_88_notifications_page_authenticated_filters(self):
+        """Verify authenticated notifications page renders all/unread tabs and cards."""
+        user_id = database.create_user(email="feed_user@campus.edu", name="Feed User", password_plain="Password123!")
+
+        n1 = database.create_notification(user_id, "welcome", "Welcome Feed", "Welcome message")
+        n2 = database.create_notification(user_id, "inquiry_received", "Inquiry Feed", "Inquiry text")
+        database.mark_notification_as_read(n1, user_id)
+
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['user_email'] = 'feed_user@campus.edu'
+            sess['user_name'] = 'Feed User'
+
+        # View All tab
+        res_all = self.client.get('/notifications')
+        self.assertEqual(res_all.status_code, 200)
+        html_all = res_all.data.decode('utf-8')
+        self.assertIn('Welcome Feed', html_all)
+        self.assertIn('Inquiry Feed', html_all)
+        self.assertIn('All (2)', html_all)
+        self.assertIn('Unread', html_all)
+
+        # View Unread tab
+        res_unread = self.client.get('/notifications?filter=unread')
+        self.assertEqual(res_unread.status_code, 200)
+        html_unread = res_unread.data.decode('utf-8')
+        feed_content = html_unread.split('class="notifications-feed"')[1].split('</main>')[0]
+        self.assertIn('Inquiry Feed', feed_content)
+        self.assertNotIn('Welcome Feed', feed_content)
+
+    # ------------------------------------------------------------------
+    # 89. Mark Notification Read & Read All Routes
+    # ------------------------------------------------------------------
+    def test_89_mark_notification_read_and_read_all_routes(self):
+        """Verify POST routes for marking single notification and all notifications as read."""
+        user_1 = database.create_user(email="user1_notif@campus.edu", name="User One", password_plain="Password123!")
+        user_2 = database.create_user(email="user2_notif@campus.edu", name="User Two", password_plain="Password123!")
+
+        notif1 = database.create_notification(user_1, "inquiry_received", "Msg 1", "Body 1")
+        notif2 = database.create_notification(user_1, "inquiry_received", "Msg 2", "Body 2")
+        notif_other = database.create_notification(user_2, "welcome", "Msg Other", "Body Other")
+
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = user_1
+            sess['user_email'] = 'user1_notif@campus.edu'
+            sess['user_name'] = 'User One'
+
+        # Mark single read
+        res_single = self.client.post(f'/notifications/{notif1}/read', follow_redirects=True)
+        self.assertEqual(res_single.status_code, 200)
+        self.assertEqual(database.get_unread_notification_count(user_1), 1)
+
+        # Unauthorized attempt on user 2's notification returns 403
+        res_forbidden = self.client.post(f'/notifications/{notif_other}/read')
+        self.assertEqual(res_forbidden.status_code, 403)
+
+        # Mark all read
+        res_all = self.client.post('/notifications/read-all', follow_redirects=True)
+        self.assertEqual(res_all.status_code, 200)
+        self.assertEqual(database.get_unread_notification_count(user_1), 0)
+
+    # ------------------------------------------------------------------
+    # 90. Delete Notification Route & Cross-User Protection
+    # ------------------------------------------------------------------
+    def test_90_delete_notification_route(self):
+        """Verify deleting notification via route with cross-user 403 protection."""
+        user_a = database.create_user(email="del_a@campus.edu", name="Del A", password_plain="Password123!")
+        user_b = database.create_user(email="del_b@campus.edu", name="Del B", password_plain="Password123!")
+
+        notif_a = database.create_notification(user_a, "welcome", "Delete Me", "To be deleted")
+        notif_b = database.create_notification(user_b, "welcome", "Keep Me", "Should stay")
+
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = user_a
+            sess['user_email'] = 'del_a@campus.edu'
+            sess['user_name'] = 'Del A'
+
+        # Attempt to delete User B's notification -> 403
+        res_bad = self.client.post(f'/notifications/{notif_b}/delete')
+        self.assertEqual(res_bad.status_code, 403)
+        self.assertIsNotNone(database.get_notification_by_id(notif_b))
+
+        # Successfully delete own notification
+        res_good = self.client.post(f'/notifications/{notif_a}/delete', follow_redirects=True)
+        self.assertEqual(res_good.status_code, 200)
+        self.assertIsNone(database.get_notification_by_id(notif_a))
+
+    # ------------------------------------------------------------------
+    # 91. CSRF Protection on Notification Actions
+    # ------------------------------------------------------------------
+    def test_91_notifications_csrf_protection(self):
+        """Verify CSRF token is required on notification mutation endpoints when enabled."""
+        user_id = database.create_user(email="csrf_notif@campus.edu", name="CSRF User", password_plain="Password123!")
+        notif_id = database.create_notification(user_id, "welcome", "CSRF Test", "Testing CSRF")
+
+        try:
+            self.app.config['WTF_CSRF_ENABLED'] = True
+            with self.client.session_transaction() as sess:
+                sess['user_id'] = user_id
+                sess['user_email'] = 'csrf_notif@campus.edu'
+
+            # POST without CSRF token must fail with 400
+            res = self.client.post(f'/notifications/{notif_id}/read')
+            self.assertEqual(res.status_code, 400)
+        finally:
+            self.app.config['WTF_CSRF_ENABLED'] = False
+
+    # ------------------------------------------------------------------
+    # 92. Real Event Triggers: Signup & Email Verification
+    # ------------------------------------------------------------------
+    def test_92_real_event_triggers_signup_and_verify_email(self):
+        """Verify welcome notification on signup and verified notification on email verification."""
+        # 1. Signup triggers welcome notification
+        res_signup = self.client.post('/signup', data={
+            'name': 'New Student',
+            'email': 'new_student_notif@campus.edu',
+            'password': 'Password123!',
+            'confirm_password': 'Password123!'
+        }, follow_redirects=True)
+        self.assertEqual(res_signup.status_code, 200)
+
+        created_user = database.get_user_by_email('new_student_notif@campus.edu')
+        self.assertIsNotNone(created_user)
+
+        user_notifs = database.get_notifications_for_user(created_user['id'])
+        self.assertEqual(len(user_notifs), 1)
+        self.assertEqual(user_notifs[0]['notification_type'], 'welcome')
+        self.assertIn("Welcome to CampusConnect!", user_notifs[0]['title'])
+
+        # 2. Email verification triggers verification_complete notification
+        token = created_user['verification_token']
+        res_verify = self.client.get(f'/verify-email/{token}', follow_redirects=True)
+        self.assertEqual(res_verify.status_code, 200)
+
+        updated_notifs = database.get_notifications_for_user(created_user['id'])
+        self.assertEqual(len(updated_notifs), 2)
+        # Newest notification should be verification_complete
+        self.assertEqual(updated_notifs[0]['notification_type'], 'verification_complete')
+        self.assertIn("Email Verified", updated_notifs[0]['title'])
+
+    # ------------------------------------------------------------------
+    # 93. Real Event Triggers: Contact Inquiry & Anonymous Safety
+    # ------------------------------------------------------------------
+    def test_93_real_event_triggers_contact_inquiry_and_anonymous_safety(self):
+        """Verify inquiry notification sent to known owner; anonymous reports skip safely."""
+        owner_id = database.create_user(email="listing_owner@campus.edu", name="Listing Owner", password_plain="Password123!")
+        pin = "1234"
+
+        # Item owned by listing_owner
+        item_id = database.create_item(
+            'lost', 'Math Calculator', 'Electronics', 'Math Hall', '2026-10-29',
+            'TI-84 grapher', 'Listing Owner', 'listing_owner@campus.edu', pin,
+            user_id=owner_id
+        )
+
+        # 1. Send contact inquiry to owned item
+        res_contact = self.client.post(f'/items/{item_id}/contact', data={
+            'sender_name': 'Inquirer Sam',
+            'sender_contact': 'sam@campus.edu',
+            'message': 'I think I saw your calculator at the front desk.'
+        }, follow_redirects=True)
+        self.assertEqual(res_contact.status_code, 200)
+
+        owner_notifs = database.get_notifications_for_user(owner_id)
+        self.assertEqual(len(owner_notifs), 1)
+        self.assertEqual(owner_notifs[0]['notification_type'], 'inquiry_received')
+        self.assertIn('Inquirer Sam', owner_notifs[0]['message'])
+
+        # 2. Anonymous/legacy item with no registered owner
+        anon_item_id = database.create_item(
+            'found', 'Blue Umbrella', 'Other / Miscellaneous', 'Cafeteria', '2026-10-29',
+            'Found umbrella', 'Anonymous Poster', 'anon_guest_99@example.com', pin,
+            user_id=None
+        )
+
+        # Submitting inquiry to anonymous item must succeed without crashing
+        res_anon_contact = self.client.post(f'/items/{anon_item_id}/contact', data={
+            'sender_name': 'Inquirer Alex',
+            'sender_contact': 'alex@campus.edu',
+            'message': 'Is the umbrella dark blue?'
+        }, follow_redirects=True)
+        self.assertEqual(res_anon_contact.status_code, 200)
+
+    # ------------------------------------------------------------------
+    # 94. Real Event Triggers: Status Update & Anonymous Safety
+    # ------------------------------------------------------------------
+    def test_94_real_event_triggers_status_update_and_anonymous_safety(self):
+        """Verify status change triggers notification for known owner; anonymous reports skip safely."""
+        owner_id = database.create_user(email="status_owner@campus.edu", name="Status Owner", password_plain="Password123!")
+        pin = "1234"
+
+        item_id = database.create_item(
+            'lost', 'Dorm Keys', 'Student IDs & Keys', 'Quad', '2026-10-29',
+            'Brass keys on lanyard', 'Status Owner', 'status_owner@campus.edu', pin,
+            user_id=owner_id
+        )
+
+        # Resolve item
+        res_resolve = self.client.post(f'/items/{item_id}/status', data={
+            'pin': pin,
+            'status': 'resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res_resolve.status_code, 200)
+
+        notifs = database.get_notifications_for_user(owner_id)
+        self.assertEqual(len(notifs), 1)
+        self.assertEqual(notifs[0]['notification_type'], 'status_changed')
+        self.assertIn('RESOLVED', notifs[0]['message'])
+
+        # Anonymous item status update
+        anon_item_id = database.create_item(
+            'lost', 'Water Bottle', 'Clothing & Accessories', 'Gym', '2026-10-29',
+            'Green bottle', 'Guest', 'guest_stranger@example.com', pin,
+            user_id=None
+        )
+        res_anon_status = self.client.post(f'/items/{anon_item_id}/status', data={
+            'pin': pin,
+            'status': 'resolved'
+        }, follow_redirects=True)
+        self.assertEqual(res_anon_status.status_code, 200)
+
+    # ------------------------------------------------------------------
+    # 95. Navbar Bell, Badge & Dropdown Markup
+    # ------------------------------------------------------------------
+    def test_95_navbar_bell_and_badge_and_dropdown_rendering(self):
+        """Verify notification bell, unread badge, and dropdown in navbar for authenticated users."""
+        # Unauthenticated: no bell rendered
+        res_guest = self.client.get('/')
+        html_guest = res_guest.data.decode('utf-8')
+        self.assertNotIn('id="navBellBtn"', html_guest)
+
+        # Authenticated user
+        user_id = database.create_user(email="navbar_user@campus.edu", name="Navbar User", password_plain="Password123!")
+        database.create_notification(user_id, "welcome", "Navbar Bell Title", "Testing navbar bell markup")
+
+        with self.client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['user_email'] = 'navbar_user@campus.edu'
+            sess['user_name'] = 'Navbar User'
+
+        res_auth = self.client.get('/')
+        html_auth = res_auth.data.decode('utf-8')
+        self.assertIn('id="navBellBtn"', html_auth)
+        self.assertIn('id="navBadgeCount"', html_auth)
+        self.assertIn('id="navNotificationsDropdown"', html_auth)
+        self.assertIn('Navbar Bell Title', html_auth)
+
+    # ------------------------------------------------------------------
+    # 96. Safe Target URL Validation Helper
+    # ------------------------------------------------------------------
+    def test_96_target_url_safety_validation(self):
+        """Verify is_safe_target_url accepts relative internal paths and rejects unsafe URLs."""
+        self.assertTrue(database.is_safe_target_url('/items/123'))
+        self.assertTrue(database.is_safe_target_url('/profile'))
+        self.assertTrue(database.is_safe_target_url('/notifications?filter=unread'))
+        self.assertTrue(database.is_safe_target_url(None))
+
+        # Rejects external domains and unsafe protocols
+        self.assertFalse(database.is_safe_target_url('https://evil.com/phish'))
+        self.assertFalse(database.is_safe_target_url('http://evil.com'))
+        self.assertFalse(database.is_safe_target_url('//evil.com/hack'))
+        self.assertFalse(database.is_safe_target_url('/\\evil.com'))
+        self.assertFalse(database.is_safe_target_url('javascript:alert(1)'))
+        self.assertFalse(database.is_safe_target_url('data:text/html,<script>'))
+
+
+
 
 
 if __name__ == '__main__':

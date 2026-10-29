@@ -192,9 +192,19 @@
                                 <span class="preview-filesize" id="previewFilesize">0 MB</span>
                             </div>
                             <div class="photo-preview-controls">
-                                <button type="button" class="btn-preview-control btn-retake" id="btnRetakePhoto">
-                                    <span aria-hidden="true">🔄</span> Retake / Change
-                                </button>
+                                <div class="retake-dropdown-wrap" id="retakeDropdownWrap">
+                                    <button type="button" class="btn-preview-control btn-retake" id="btnRetakePhoto" aria-haspopup="true" aria-expanded="false" title="Choose to retake with camera or browse files">
+                                        <span aria-hidden="true">🔄</span> Retake / Change
+                                    </button>
+                                    <div class="retake-options-menu" id="retakeOptionsMenu" style="display: none;" role="menu" aria-label="Retake or change options">
+                                        <button type="button" class="btn-retake-option" id="btnRetakeCamera" role="menuitem">
+                                            <span aria-hidden="true">📷</span> Reopen Camera
+                                        </button>
+                                        <button type="button" class="btn-retake-option" id="btnRetakeGallery" role="menuitem">
+                                            <span aria-hidden="true">📁</span> Browse Files
+                                        </button>
+                                    </div>
+                                </div>
                                 <button type="button" class="btn-preview-control btn-remove" id="btnRemovePhoto">
                                     <span aria-hidden="true">🗑️</span> Remove Photo
                                 </button>

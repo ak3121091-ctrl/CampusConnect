@@ -174,14 +174,27 @@ document.addEventListener('DOMContentLoaded', () => {
     function submitFilterForm(newType) {
         if (!filterForm) return;
 
-        if (newType && itemTypeInput) {
-            itemTypeInput.value = newType;
+        if (newType === 'resolved') {
+            if (itemTypeInput) itemTypeInput.value = 'all';
+            if (statusSelect) statusSelect.value = 'resolved';
+        } else if (newType) {
+            if (itemTypeInput) itemTypeInput.value = newType;
+            if (statusSelect && statusSelect.value === 'resolved') {
+                statusSelect.value = 'open';
+            }
         }
 
         // Keep selected tabs visually active and update aria-selected immediately
         const activeType = (newType || (itemTypeInput ? itemTypeInput.value : 'all')) || 'all';
+        const activeStatus = (statusSelect ? statusSelect.value : '');
         typeTabs.forEach(t => {
-            const isSelected = (t.getAttribute('data-type') === activeType);
+            const tabType = t.getAttribute('data-type');
+            let isSelected = false;
+            if (tabType === 'resolved') {
+                isSelected = (activeStatus === 'resolved' || activeType === 'resolved');
+            } else {
+                isSelected = (activeStatus !== 'resolved' && activeType !== 'resolved' && tabType === activeType);
+            }
             t.classList.toggle('active', isSelected);
             t.setAttribute('aria-selected', isSelected ? 'true' : 'false');
         });
@@ -333,11 +346,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewFilename = document.getElementById('previewFilename');
     const previewFilesize = document.getElementById('previewFilesize');
     const btnRetakePhoto = document.getElementById('btnRetakePhoto');
+    const retakeDropdownWrap = document.getElementById('retakeDropdownWrap');
+    const retakeOptionsMenu = document.getElementById('retakeOptionsMenu');
+    const btnRetakeCamera = document.getElementById('btnRetakeCamera');
+    const btnRetakeGallery = document.getElementById('btnRetakeGallery');
     const btnRemovePhoto = document.getElementById('btnRemovePhoto');
     const photoErrorMessage = document.getElementById('photoErrorMessage');
 
     const MAX_PHOTO_BYTES = 5 * 1024 * 1024; // 5 MB
     const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+    const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/pjpeg', 'image/x-png'];
 
     function showPhotoError(msg) {
         if (!photoErrorMessage) return;
@@ -351,23 +369,59 @@ document.addEventListener('DOMContentLoaded', () => {
         photoErrorMessage.style.display = 'none';
     }
 
+    function openRetakeMenu() {
+        if (!retakeOptionsMenu) return;
+        retakeOptionsMenu.style.display = 'flex';
+        if (btnRetakePhoto) btnRetakePhoto.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeRetakeMenu() {
+        if (!retakeOptionsMenu) return;
+        retakeOptionsMenu.style.display = 'none';
+        if (btnRetakePhoto) btnRetakePhoto.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleRetakeMenu() {
+        if (!retakeOptionsMenu) return;
+        const isOpen = retakeOptionsMenu.style.display === 'flex' || retakeOptionsMenu.style.display === 'block';
+        if (isOpen) {
+            closeRetakeMenu();
+        } else {
+            openRetakeMenu();
+        }
+    }
+
     function handleSelectedFile(file, activeInput) {
         clearPhotoError();
         if (!file) return;
 
-        // Extension & Type checks
-        const ext = file.name ? file.name.split('.').pop().toLowerCase() : '';
-        const mime = file.type ? file.type.toLowerCase() : '';
-        const isValidExt = ALLOWED_EXTENSIONS.includes(ext);
-        const isValidMime = mime.startsWith('image/') || mime === '';
+        // Strict extension & MIME validation (JPEG, PNG, WebP only)
+        const ext = (file.name && file.name.lastIndexOf('.') !== -1)
+            ? file.name.split('.').pop().toLowerCase().trim()
+            : '';
+        const mime = file.type ? file.type.toLowerCase().trim() : '';
 
-        if (!isValidExt && !isValidMime) {
-            showPhotoError("Unsupported image format. Please select a JPEG, PNG, or WebP photo.");
+        const isAllowedExt = ext ? ALLOWED_EXTENSIONS.includes(ext) : false;
+        const isAllowedMime = mime ? ALLOWED_MIME_TYPES.includes(mime) : false;
+
+        // Reject if neither matches, or if an invalid extension / MIME is provided
+        const isValidFormat = (ext && mime)
+            ? (isAllowedExt && isAllowedMime)
+            : (isAllowedExt || isAllowedMime);
+
+        if (!isValidFormat) {
+            showPhotoError("Unsupported image format. Only JPEG, PNG, and WebP photos are accepted.");
             activeInput.value = '';
             return;
         }
 
-        // File size check (5 MB limit)
+        // File size validation (non-empty and <= 5 MB)
+        if (!file.size || file.size <= 0) {
+            showPhotoError("Selected photo file is empty (0 bytes). Please select a valid photo.");
+            activeInput.value = '';
+            return;
+        }
+
         if (file.size > MAX_PHOTO_BYTES) {
             const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
             showPhotoError(`Selected photo is ${sizeInMB} MB. Maximum allowed image size is 5 MB.`);
@@ -382,28 +436,38 @@ document.addEventListener('DOMContentLoaded', () => {
             cameraInput.value = '';
         }
 
-        // Generate client-side preview
+        // Generate client-side preview with image decoding verification
         const reader = new FileReader();
         reader.onload = function(e) {
-            if (photoPreviewImg) {
-                photoPreviewImg.src = e.target.result;
-            }
-            if (previewFilename) {
-                previewFilename.textContent = file.name || 'Captured Photo';
-            }
-            if (previewFilesize) {
-                const sizeDisplay = file.size > 1024 * 1024
-                    ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-                    : `${Math.round(file.size / 1024)} KB`;
-                previewFilesize.textContent = sizeDisplay;
-            }
+            const testImg = new Image();
+            testImg.onload = function() {
+                if (photoPreviewImg) {
+                    photoPreviewImg.src = e.target.result;
+                }
+                if (previewFilename) {
+                    previewFilename.textContent = file.name || 'Captured Photo';
+                }
+                if (previewFilesize) {
+                    const sizeDisplay = file.size > 1024 * 1024
+                        ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+                        : `${Math.round(file.size / 1024)} KB`;
+                    previewFilesize.textContent = sizeDisplay;
+                }
 
-            if (photoActionButtons) photoActionButtons.style.display = 'none';
-            if (photoHelpText) photoHelpText.style.display = 'none';
-            if (photoPreviewCard) photoPreviewCard.style.display = 'flex';
+                if (photoActionButtons) photoActionButtons.style.display = 'none';
+                if (photoHelpText) photoHelpText.style.display = 'none';
+                if (photoPreviewCard) photoPreviewCard.style.display = 'flex';
+                closeRetakeMenu();
+            };
+            testImg.onerror = function() {
+                showPhotoError("The selected file is corrupt or not a readable image. Please select a valid photo.");
+                activeInput.value = '';
+            };
+            testImg.src = e.target.result;
         };
         reader.onerror = function() {
             showPhotoError("Unable to read selected photo file. Please try another image.");
+            activeInput.value = '';
         };
         reader.readAsDataURL(file);
     }
@@ -432,22 +496,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Retake / Change Photo
+    // Retake / Change Photo: Toggle options menu so user can choose camera or files
     if (btnRetakePhoto) {
-        btnRetakePhoto.addEventListener('click', () => {
+        btnRetakePhoto.addEventListener('click', (e) => {
+            e.stopPropagation();
             clearPhotoError();
-            // Trigger file picker fallback by default for retake
-            if (fileInput) {
-                fileInput.click();
-            } else if (cameraInput) {
-                cameraInput.click();
-            }
+            toggleRetakeMenu();
         });
     }
 
-    // Remove Photo
+    if (btnRetakeCamera && cameraInput) {
+        btnRetakeCamera.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeRetakeMenu();
+            clearPhotoError();
+            cameraInput.click();
+        });
+    }
+
+    if (btnRetakeGallery && fileInput) {
+        btnRetakeGallery.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeRetakeMenu();
+            clearPhotoError();
+            fileInput.click();
+        });
+    }
+
+    // Close retake menu when clicking outside or pressing Escape
+    document.addEventListener('click', (e) => {
+        if (retakeDropdownWrap && !retakeDropdownWrap.contains(e.target)) {
+            closeRetakeMenu();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeRetakeMenu();
+        }
+    });
+
+    // Remove Photo: Reset file inputs and restore action buttons
     if (btnRemovePhoto) {
         btnRemovePhoto.addEventListener('click', () => {
+            closeRetakeMenu();
             if (cameraInput) cameraInput.value = '';
             if (fileInput) fileInput.value = '';
             if (photoPreviewImg) photoPreviewImg.src = '';
@@ -472,4 +564,312 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 6500);
     });
+
+    // -------------------------------------------------------------------------
+    // 8. Authentication UI: Show/Hide Password, Multi-Step Transitions & Validation
+    // -------------------------------------------------------------------------
+    function setupPasswordToggle(btnId, inputId) {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (!btn || !input) return;
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            btn.setAttribute('aria-pressed', isPassword ? 'true' : 'false');
+            btn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password as plain text');
+
+            const eyeShow = btn.querySelector('.eye-show');
+            const eyeHide = btn.querySelector('.eye-hide');
+            if (eyeShow && eyeHide) {
+                eyeShow.style.display = isPassword ? 'none' : 'inline';
+                eyeHide.style.display = isPassword ? 'inline' : 'none';
+            }
+        });
+    }
+
+    setupPasswordToggle('togglePasswordBtn', 'loginPassword');
+    setupPasswordToggle('toggleSignupPasswordBtn', 'signupPassword');
+    setupPasswordToggle('toggleConfirmPasswordBtn', 'signupConfirmPassword');
+
+    // Google OAuth disabled notice toggler
+    document.querySelectorAll('.btn-oauth-disabled').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const notice = document.getElementById('oauthNotice');
+            if (notice) {
+                notice.style.display = (notice.style.display === 'none' || !notice.style.display) ? 'block' : 'none';
+            }
+        });
+    });
+
+    // Login Form Submission: Loading state
+    const loginForm = document.getElementById('loginForm');
+    const btnSubmitLogin = document.getElementById('btnSubmitLogin');
+    const loginSpinner = document.getElementById('loginSpinner');
+    const loginBtnText = document.getElementById('loginBtnText');
+    const loginEmail = document.getElementById('loginEmail');
+    const loginPassword = document.getElementById('loginPassword');
+    const emailError = document.getElementById('emailError');
+    const passwordError = document.getElementById('passwordError');
+
+    if (loginForm && btnSubmitLogin) {
+        loginForm.addEventListener('submit', (e) => {
+            let isValid = true;
+            if (emailError) emailError.style.display = 'none';
+            if (passwordError) passwordError.style.display = 'none';
+
+            if (loginEmail && (!loginEmail.value.trim() || !loginEmail.value.includes('@'))) {
+                if (emailError) {
+                    emailError.textContent = 'Please enter a valid campus email address.';
+                    emailError.style.display = 'block';
+                }
+                isValid = false;
+            }
+
+            if (loginPassword && !loginPassword.value) {
+                if (passwordError) {
+                    passwordError.textContent = 'Please enter your password.';
+                    passwordError.style.display = 'block';
+                }
+                isValid = false;
+            }
+
+            if (!isValid) {
+                e.preventDefault();
+                return;
+            }
+
+            btnSubmitLogin.disabled = true;
+            if (loginSpinner) loginSpinner.style.display = 'inline-block';
+            if (loginBtnText) loginBtnText.textContent = 'Signing in...';
+        });
+    }
+
+    // Signup Form: Multi-Step Transitions, Password Strength & Confirmation
+    const signupForm = document.getElementById('signupForm');
+    const stepPanel1 = document.getElementById('stepPanel1');
+    const stepPanel2 = document.getElementById('stepPanel2');
+    const stepIndicator1 = document.getElementById('stepIndicator1');
+    const stepIndicator2 = document.getElementById('stepIndicator2');
+    const stepConnector = document.getElementById('stepConnector');
+    const btnNextStep = document.getElementById('btnNextStep');
+    const btnPrevStep = document.getElementById('btnPrevStep');
+    const btnSubmitSignup = document.getElementById('btnSubmitSignup');
+    const signupSpinner = document.getElementById('signupSpinner');
+    const signupBtnText = document.getElementById('signupBtnText');
+
+    const signupName = document.getElementById('signupName');
+    const signupEmail = document.getElementById('signupEmail');
+    const signupPassword = document.getElementById('signupPassword');
+    const signupConfirmPassword = document.getElementById('signupConfirmPassword');
+    const nameError = document.getElementById('nameError');
+    const signupEmailError = document.getElementById('emailError');
+    const signupPasswordError = document.getElementById('passwordError');
+    const confirmPasswordError = document.getElementById('confirmPasswordError');
+    const meterFill = document.getElementById('meterFill');
+    const meterText = document.getElementById('meterText');
+    const matchBadge = document.getElementById('matchBadge');
+
+    function validateStep1() {
+        let valid = true;
+        if (nameError) nameError.style.display = 'none';
+        if (signupEmailError) signupEmailError.style.display = 'none';
+
+        const nameVal = signupName ? signupName.value.trim() : '';
+        const rawEmailVal = signupEmail ? signupEmail.value : '';
+        const emailVal = rawEmailVal.trim();
+        const emailRegex = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+        if (!nameVal || nameVal.length < 2) {
+            if (nameError) {
+                nameError.textContent = 'Name must be at least 2 characters long.';
+                nameError.style.display = 'block';
+            }
+            if (signupName) signupName.focus();
+            valid = false;
+        } else if (!rawEmailVal) {
+            if (signupEmailError) {
+                signupEmailError.textContent = 'Please enter your campus email address.';
+                signupEmailError.style.display = 'block';
+            }
+            if (signupEmail) signupEmail.focus();
+            valid = false;
+        } else if (rawEmailVal !== emailVal) {
+            if (signupEmailError) {
+                signupEmailError.textContent = 'Email address cannot have leading or trailing spaces.';
+                signupEmailError.style.display = 'block';
+            }
+            if (signupEmail) signupEmail.focus();
+            valid = false;
+        } else if (!emailRegex.test(emailVal) || emailVal.length > 100) {
+            if (signupEmailError) {
+                signupEmailError.textContent = 'Please enter a valid, properly formatted email address (e.g. student@campus.edu).';
+                signupEmailError.style.display = 'block';
+            }
+            if (signupEmail) signupEmail.focus();
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    if (btnNextStep && stepPanel1 && stepPanel2) {
+        btnNextStep.addEventListener('click', () => {
+            if (validateStep1()) {
+                stepPanel1.style.display = 'none';
+                stepPanel2.style.display = 'flex';
+                if (stepIndicator1) {
+                    stepIndicator1.classList.remove('active');
+                    stepIndicator1.classList.add('completed');
+                }
+                if (stepIndicator2) stepIndicator2.classList.add('active');
+                if (stepConnector) stepConnector.classList.add('active');
+                if (signupPassword) signupPassword.focus();
+            }
+        });
+    }
+
+    if (btnPrevStep && stepPanel1 && stepPanel2) {
+        btnPrevStep.addEventListener('click', () => {
+            stepPanel2.style.display = 'none';
+            stepPanel1.style.display = 'flex';
+            if (stepIndicator1) {
+                stepIndicator1.classList.add('active');
+                stepIndicator1.classList.remove('completed');
+            }
+            if (stepIndicator2) stepIndicator2.classList.remove('active');
+            if (stepConnector) stepConnector.classList.remove('active');
+        });
+    }
+
+    function calculatePasswordStrength(pwd) {
+        if (!pwd) return { score: 0, label: 'Empty', color: '#64748b', width: '0%' };
+        let score = 0;
+        if (pwd.length >= 8) score += 1;
+        if (pwd.length >= 12) score += 1;
+        if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score += 1;
+        if (/[0-9]/.test(pwd)) score += 1;
+        if (/[^a-zA-Z0-9]/.test(pwd)) score += 1;
+
+        if (score <= 1) return { score, label: 'Weak (min 8 chars)', color: '#ef4444', width: '25%' };
+        if (score === 2) return { score, label: 'Fair', color: '#f59e0b', width: '50%' };
+        if (score === 3 || score === 4) return { score, label: 'Good', color: '#3b82f6', width: '75%' };
+        return { score, label: 'Strong', color: '#10b981', width: '100%' };
+    }
+
+    if (signupPassword && meterFill && meterText) {
+        signupPassword.addEventListener('input', () => {
+            const pwd = signupPassword.value;
+            const strength = calculatePasswordStrength(pwd);
+            meterFill.style.width = strength.width;
+            meterFill.style.backgroundColor = strength.color;
+            meterText.textContent = `Password strength: ${strength.label}`;
+            meterText.style.color = strength.color;
+
+            checkPasswordMatch();
+        });
+    }
+
+    function checkPasswordMatch() {
+        if (!signupConfirmPassword || !matchBadge) return;
+        const pwd = signupPassword ? signupPassword.value : '';
+        const confirmPwd = signupConfirmPassword.value;
+
+        if (!confirmPwd) {
+            matchBadge.style.display = 'none';
+            return;
+        }
+
+        matchBadge.style.display = 'block';
+        if (pwd === confirmPwd) {
+            matchBadge.textContent = '✓ Passwords match';
+            matchBadge.className = 'password-match-badge matched';
+        } else {
+            matchBadge.textContent = '✗ Passwords do not match';
+            matchBadge.className = 'password-match-badge mismatched';
+        }
+    }
+
+    if (signupConfirmPassword) {
+        signupConfirmPassword.addEventListener('input', checkPasswordMatch);
+    }
+
+    if (signupForm && btnSubmitSignup) {
+        signupForm.addEventListener('submit', (e) => {
+            if (signupPasswordError) signupPasswordError.style.display = 'none';
+            if (confirmPasswordError) confirmPasswordError.style.display = 'none';
+
+            if (!validateStep1()) {
+                e.preventDefault();
+                if (btnPrevStep) btnPrevStep.click();
+                return;
+            }
+
+            const pwd = signupPassword ? signupPassword.value : '';
+            const confirmPwd = signupConfirmPassword ? signupConfirmPassword.value : '';
+
+            if (!pwd || pwd.length < 8) {
+                e.preventDefault();
+                if (signupPasswordError) {
+                    signupPasswordError.textContent = 'Password must be at least 8 characters long.';
+                    signupPasswordError.style.display = 'block';
+                }
+                if (signupPassword) signupPassword.focus();
+                return;
+            }
+
+            if (pwd !== confirmPwd) {
+                e.preventDefault();
+                if (confirmPasswordError) {
+                    confirmPasswordError.textContent = 'Passwords do not match.';
+                    confirmPasswordError.style.display = 'block';
+                }
+                if (signupConfirmPassword) signupConfirmPassword.focus();
+                return;
+            }
+
+            btnSubmitSignup.disabled = true;
+            if (signupSpinner) signupSpinner.style.display = 'inline-block';
+            if (signupBtnText) signupBtnText.textContent = 'Creating Account...';
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // Phase 3: In-App Notification Bell & Dropdown Interactions
+    // -------------------------------------------------------------------------
+    const navBellBtn = document.getElementById('navBellBtn');
+    const navNotificationsDropdown = document.getElementById('navNotificationsDropdown');
+    const navNotificationsContainer = document.getElementById('navNotificationsContainer');
+
+    if (navBellBtn && navNotificationsDropdown) {
+        navBellBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isExpanded = navBellBtn.getAttribute('aria-expanded') === 'true';
+            if (isExpanded) {
+                navNotificationsDropdown.hidden = true;
+                navBellBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                navNotificationsDropdown.hidden = false;
+                navBellBtn.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        // Close on outside click
+        document.addEventListener('click', (e) => {
+            if (navNotificationsContainer && !navNotificationsContainer.contains(e.target)) {
+                navNotificationsDropdown.hidden = true;
+                navBellBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !navNotificationsDropdown.hidden) {
+                navNotificationsDropdown.hidden = true;
+                navBellBtn.setAttribute('aria-expanded', 'false');
+                navBellBtn.focus();
+            }
+        });
+    }
 });

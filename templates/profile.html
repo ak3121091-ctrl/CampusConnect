@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}My Profile & Reports - CampusConnect{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <!-- Breadcrumb / Back Link -->
+    <div class="profile-top-bar">
+        <a href="{{ url_for('index') }}" class="back-link">
+            &larr; Back to Directory
+        </a>
+    </div>
+
+    <!-- User Overview & Profile Header -->
+    <div class="profile-grid">
+        <!-- Left: Profile Info Card & Edit Profile -->
+        <div class="profile-sidebar">
+            <div class="profile-card">
+                <div class="profile-avatar-wrap">
+                    <div class="profile-avatar-circle" aria-hidden="true">
+                        {{ current_user_initials }}
+                    </div>
+                </div>
+
+                <h1 class="profile-name">{{ user.name }}</h1>
+                <p class="profile-email">{{ user.email }}</p>
+
+                <!-- Verification Status Badge -->
+                <div class="profile-verification-status">
+                    {% if user.is_verified %}
+                        <span class="badge-verified" title="Email address verified">
+                            <span class="badge-icon">✓</span> Verified Account
+                        </span>
+                    {% else %}
+                        <span class="badge-unverified" title="Email verification pending">
+                            <span class="badge-icon">⚠️</span> Unverified Email
+                        </span>
+                        <div class="verification-action-box">
+                            <p class="verification-hint">Please verify your email address to secure your account.</p>
+                            <form action="{{ url_for('resend_verification') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-resend-verification">
+                                    Resend Verification Link
+                                </button>
+                            </form>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Account Meta -->
+                <div class="profile-meta-list">
+                    <div class="profile-meta-item">
+                        <span class="meta-label">Member Since</span>
+                        <span class="meta-value">{{ user.created_at[:10] if user.created_at else '2026' }}</span>
+                    </div>
+                    <div class="profile-meta-item">
+                        <span class="meta-label">Total Reports</span>
+                        <span class="meta-value">{{ user_items|length }}</span>
+                    </div>
+                    <div class="profile-meta-item">
+                        <span class="meta-label">Resolved</span>
+                        <span class="meta-value">{{ resolved_items|length }}</span>
+                    </div>
+                </div>
+
+                <!-- Edit Profile Accordion / Section -->
+                <div class="profile-edit-section">
+                    <h3 class="profile-section-title">Edit Profile</h3>
+                    <form action="{{ url_for('profile') }}" method="POST" class="profile-edit-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="update_profile">
+
+                        <div class="form-group">
+                            <label for="profileNameInput" class="form-label">Full Name</label>
+                            <input
+                                type="text"
+                                id="profileNameInput"
+                                name="name"
+                                class="form-input"
+                                value="{{ user.name }}"
+                                required
+                                minlength="2"
+                                maxlength="60"
+                            >
+                        </div>
+
+                        <button type="submit" class="btn-save-profile">
+                            Save Changes
+                        </button>
+                    </form>
+                </div>
+
+                <div class="profile-logout-wrap">
+                    <a href="{{ url_for('logout') }}" class="btn-profile-logout">
+                        <span class="btn-icon">🚪</span> Sign Out
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: My Reports Listing -->
+        <div class="profile-main">
+            <div class="profile-reports-header">
+                <div class="reports-header-text">
+                    <h2 class="reports-section-title">My Reports</h2>
+                    <p class="reports-section-subtitle">Manage and track your campus Lost &amp; Found listings.</p>
+                </div>
+                <a href="{{ url_for('submit_item') }}" class="btn-report-new">
+                    <span class="btn-icon">＋</span> Report New Item
+                </a>
+            </div>
+
+            <!-- Report Status Counters -->
+            <div class="profile-stats-row">
+                <div class="profile-stat-box">
+                    <span class="stat-num">{{ user_items|length }}</span>
+                    <span class="stat-name">Total Reports</span>
+                </div>
+                <div class="profile-stat-box stat-lost">
+                    <span class="stat-num">{{ lost_items|length }}</span>
+                    <span class="stat-name">Open Lost</span>
+                </div>
+                <div class="profile-stat-box stat-found">
+                    <span class="stat-num">{{ found_items|length }}</span>
+                    <span class="stat-name">Open Found</span>
+                </div>
+                <div class="profile-stat-box stat-resolved">
+                    <span class="stat-num">{{ resolved_items|length }}</span>
+                    <span class="stat-name">Resolved</span>
+                </div>
+            </div>
+
+            <!-- Reports List -->
+            {% if user_items %}
+                <div class="profile-reports-list" id="myReportsList">
+                    {% for item in user_items %}
+                        <div class="profile-item-card status-{{ item.status }}">
+                            <!-- Thumbnail / Image -->
+                            <div class="profile-item-thumb">
+                                {% if item.image_filename %}
+                                    <img
+                                        src="{{ url_for('uploaded_file', filename=item.image_filename) }}"
+                                        alt="{{ item.title }}"
+                                        class="profile-item-img"
+                                        loading="lazy"
+                                    >
+                                {% else %}
+                                    <div class="profile-item-placeholder" aria-hidden="true">
+                                        {% if item.item_type == 'lost' %}🔍{% else %}📦{% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Content -->
+                            <div class="profile-item-content">
+                                <div class="profile-item-badges">
+                                    {% if item.item_type == 'lost' %}
+                                        <span class="item-type-badge lost">Lost</span>
+                                    {% else %}
+                                        <span class="item-type-badge found">Found</span>
+                                    {% endif %}
+
+                                    {% if item.status == 'resolved' %}
+                                        <span class="status-badge-resolved">✓ Resolved</span>
+                                    {% else %}
+                                        <span class="status-badge-open">● Active</span>
+                                    {% endif %}
+
+                                    <span class="item-category-tag">{{ item.category }}</span>
+                                </div>
+
+                                <h3 class="profile-item-title">
+                                    <a href="{{ url_for('item_detail', item_id=item.id) }}">
+                                        {{ item.title }}
+                                    </a>
+                                </h3>
+
+                                <p class="profile-item-meta">
+                                    <span>📍 {{ item.location }}</span>
+                                    <span>📅 {{ item.event_date }}</span>
+                                </p>
+                            </div>
+
+                            <!-- Action -->
+                            <div class="profile-item-action">
+                                <a href="{{ url_for('item_detail', item_id=item.id) }}" class="btn-view-item">
+                                    View Details &rarr;
+                                </a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <!-- Empty State -->
+                <div class="profile-empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <h3 class="empty-state-title">No Reports Found</h3>
+                    <p class="empty-state-desc">You have not posted any lost or found items under this account yet.</p>
+                    <a href="{{ url_for('submit_item') }}" class="btn-primary-action">
+                        Report a Lost or Found Item
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+

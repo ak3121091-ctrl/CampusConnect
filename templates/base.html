@@ -32,12 +32,123 @@
 
             <!-- Navigation Links -->
             <nav class="nav-menu" id="navMenu">
-                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' and request.args.get('status') != 'resolved' and request.args.get('type') != 'resolved' %}active{% endif %}">
                     <span class="nav-link-icon">📁</span> Directory
+                </a>
+                <a href="{{ url_for('index', status='resolved') }}#itemsResults" class="nav-link {% if request.args.get('status') == 'resolved' or request.args.get('type') == 'resolved' %}active{% endif %}">
+                    <span class="nav-link-icon">✔️</span> Resolved
                 </a>
                 <a href="{{ url_for('about') }}" class="nav-link {% if request.endpoint == 'about' %}active{% endif %}">
                     <span class="nav-link-icon">ℹ️</span> About
                 </a>
+                {% if current_user %}
+                    <!-- In-App Notification Bell & Dropdown (Phase 3) -->
+                    <div class="nav-notifications-container" id="navNotificationsContainer">
+                        <button type="button" 
+                                class="nav-bell-btn {% if unread_notifications_count > 0 %}has-unread{% endif %}" 
+                                id="navBellBtn" 
+                                aria-label="Notifications ({{ unread_notifications_count }} unread)" 
+                                aria-expanded="false" 
+                                aria-controls="navNotificationsDropdown"
+                                title="Notifications">
+                            <span class="bell-icon" aria-hidden="true">🔔</span>
+                            {% if unread_notifications_count > 0 %}
+                                <span class="nav-badge-count" id="navBadgeCount">{{ unread_notifications_count if unread_notifications_count <= 99 else '99+' }}</span>
+                            {% endif %}
+                        </button>
+
+                        <div class="nav-notifications-dropdown" id="navNotificationsDropdown" role="region" aria-label="Recent notifications" hidden>
+                            <div class="notif-dropdown-header">
+                                <div class="notif-header-title">
+                                    <span class="notif-header-icon">🔔</span>
+                                    <strong>Notifications</strong>
+                                    {% if unread_notifications_count > 0 %}
+                                        <span class="notif-header-badge">{{ unread_notifications_count }} new</span>
+                                    {% endif %}
+                                </div>
+                                {% if unread_notifications_count > 0 %}
+                                    <form method="POST" action="{{ url_for('mark_all_notifications_read') }}" class="notif-mark-all-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="next" value="{{ request.full_path if request.full_path else request.path }}">
+                                        <button type="submit" class="notif-header-action" title="Mark all notifications as read">Mark all read</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+
+                            <div class="notif-dropdown-list" id="notifDropdownList">
+                                {% if recent_notifications %}
+                                    {% for notif in recent_notifications %}
+                                        <div class="notif-item {% if not notif.is_read %}notif-unread{% endif %}">
+                                            <div class="notif-item-body">
+                                                <div class="notif-item-top">
+                                                    <span class="notif-type-tag notif-type-{{ notif.notification_type }}">
+                                                        {% if notif.notification_type == 'welcome' %}🎉 Welcome
+                                                        {% elif notif.notification_type == 'verification_complete' %}✅ Verified
+                                                        {% elif notif.notification_type == 'inquiry_received' %}💬 Inquiry
+                                                        {% elif notif.notification_type == 'status_changed' %}🔄 Status
+                                                        {% else %}ℹ️ Notice{% endif %}
+                                                    </span>
+                                                    <time class="notif-time" datetime="{{ notif.created_at }}">{{ notif.created_at[:16] }}</time>
+                                                </div>
+                                                <h4 class="notif-title">{{ notif.title }}</h4>
+                                                <p class="notif-message">{{ notif.message }}</p>
+                                                {% if notif.target_url %}
+                                                    <a href="{{ notif.target_url }}" class="notif-target-link">View details &rarr;</a>
+                                                {% endif %}
+                                            </div>
+                                            <div class="notif-item-actions">
+                                                {% if not notif.is_read %}
+                                                    <form method="POST" action="{{ url_for('mark_notification_read', notification_id=notif.id) }}" class="inline-form">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="next" value="{{ request.full_path if request.full_path else request.path }}">
+                                                        <button type="submit" class="notif-action-btn notif-btn-read" title="Mark as read" aria-label="Mark notification as read">✓</button>
+                                                    </form>
+                                                {% endif %}
+                                                <form method="POST" action="{{ url_for('delete_notification', notification_id=notif.id) }}" class="inline-form">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="next" value="{{ request.full_path if request.full_path else request.path }}">
+                                                    <button type="submit" class="notif-action-btn notif-btn-delete" title="Delete notification" aria-label="Delete notification">&times;</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="notif-empty-state">
+                                        <span class="notif-empty-icon">🔕</span>
+                                        <p class="notif-empty-title">No notifications yet</p>
+                                        <p class="notif-empty-desc">You'll be alerted here when inquiries arrive or listing statuses change.</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="notif-dropdown-footer">
+                                <a href="{{ url_for('notifications_page') }}" class="notif-view-all-link">
+                                    <span>View All Notifications</span>
+                                    <span aria-hidden="true">&rarr;</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="nav-profile-group">
+                        <a href="{{ url_for('profile') }}" class="nav-profile-avatar-btn" title="View Profile: {{ current_user.name }} ({{ current_user.email }})" aria-label="User Profile">
+                            <span class="nav-profile-initials">{{ current_user_initials }}</span>
+                        </a>
+                        <a href="{{ url_for('profile') }}" class="nav-link {% if request.endpoint == 'profile' %}active{% endif %}" title="My Account & Reports">
+                            <span class="nav-link-icon">👤</span> Profile
+                        </a>
+                        <a href="{{ url_for('logout') }}" class="nav-link nav-link-logout" title="Sign out of CampusConnect">
+                            <span class="nav-link-icon">🚪</span> Sign Out
+                        </a>
+                    </div>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="nav-link {% if request.endpoint == 'login' %}active{% endif %}">
+                        <span class="nav-link-icon">🔑</span> Sign In
+                    </a>
+                    <a href="{{ url_for('signup') }}" class="nav-btn-outline {% if request.endpoint == 'signup' %}active{% endif %}">
+                        <span class="btn-icon">✨</span> Sign Up
+                    </a>
+                {% endif %}
                 <a href="{{ url_for('submit_item') }}" class="nav-btn-primary">
                     <span class="btn-icon">＋</span> Report Item
                 </a>
@@ -81,6 +192,7 @@
     </main>
 
     <!-- Footer -->
+    {% block footer %}
     <footer class="footer">
         <div class="footer-container">
             <div class="footer-left">
@@ -111,6 +223,7 @@
             <p>&copy; 2026 CampusConnect &bull; University Lost &amp; Found</p>
         </div>
     </footer>
+    {% endblock %}
 
     <!-- Vanilla JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

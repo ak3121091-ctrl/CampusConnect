@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - CampusConnect{% endblock %}
+
+{% block content %}
+<div class="notifications-page-container">
+    <!-- Breadcrumb / Header Actions -->
+    <div class="notifications-top-bar">
+        <a href="{{ url_for('index') }}" class="back-link">
+            &larr; Back to Directory
+        </a>
+        <div class="notifications-top-actions">
+            {% if unread_count > 0 %}
+                <form method="POST" action="{{ url_for('mark_all_notifications_read') }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next" value="{{ url_for('notifications_page', filter=filter_mode) }}">
+                    <button type="submit" class="btn-mark-all-read">
+                        <span class="btn-icon">✓✓</span> Mark All as Read
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Page Title & Summary Header -->
+    <header class="notifications-header">
+        <div class="notifications-header-text">
+            <h1 class="notifications-title">
+                <span class="header-icon" aria-hidden="true">🔔</span> Notifications
+            </h1>
+            <p class="notifications-subtitle">
+                Updates on your lost & found listings, received inquiries, and account status.
+            </p>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="notifications-filter-tabs" role="tablist" aria-label="Notification filters">
+            <a href="{{ url_for('notifications_page', filter='all') }}" 
+               class="notif-tab {% if filter_mode != 'unread' %}active{% endif %}"
+               role="tab" 
+               aria-selected="{% if filter_mode != 'unread' %}true{% else %}false{% endif %}">
+                All ({{ total_count }})
+            </a>
+            <a href="{{ url_for('notifications_page', filter='unread') }}" 
+               class="notif-tab {% if filter_mode == 'unread' %}active{% endif %}"
+               role="tab" 
+               aria-selected="{% if filter_mode == 'unread' %}true{% else %}false{% endif %}">
+                Unread {% if unread_count > 0 %}<span class="tab-badge">{{ unread_count }}</span>{% endif %}
+            </a>
+        </div>
+    </header>
+
+    <!-- Notifications List -->
+    <div class="notifications-card-wrapper">
+        {% if notifications %}
+            <div class="notifications-feed">
+                {% for notif in notifications %}
+                    <article class="notification-card {% if not notif.is_read %}card-unread{% endif %}" id="notif-{{ notif.id }}">
+                        <div class="notification-card-status-indicator" aria-hidden="true"></div>
+
+                        <div class="notification-card-main">
+                            <div class="notification-card-meta">
+                                <span class="notif-type-tag notif-type-{{ notif.notification_type }}">
+                                    {% if notif.notification_type == 'welcome' %}🎉 Welcome
+                                    {% elif notif.notification_type == 'verification_complete' %}✅ Verified
+                                    {% elif notif.notification_type == 'inquiry_received' %}💬 Inquiry
+                                    {% elif notif.notification_type == 'status_changed' %}🔄 Status
+                                    {% else %}ℹ️ Notice{% endif %}
+                                </span>
+
+                                <time class="notification-timestamp" datetime="{{ notif.created_at }}">
+                                    {{ notif.created_at[:16] }}
+                                </time>
+
+                                {% if not notif.is_read %}
+                                    <span class="notification-new-pill">NEW</span>
+                                {% endif %}
+                            </div>
+
+                            <h2 class="notification-card-title">{{ notif.title }}</h2>
+                            <p class="notification-card-message">{{ notif.message }}</p>
+
+                            {% if notif.target_url %}
+                                <div class="notification-card-action-link">
+                                    <a href="{{ notif.target_url }}" class="notif-link-btn">
+                                        View related listing &rarr;
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="notification-card-controls">
+                            {% if not notif.is_read %}
+                                <form method="POST" action="{{ url_for('mark_notification_read', notification_id=notif.id) }}" class="inline-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="next" value="{{ url_for('notifications_page', filter=filter_mode) }}">
+                                    <button type="submit" class="btn-notif-control btn-notif-read" title="Mark as read">
+                                        <span class="control-icon">✓</span> Mark as Read
+                                    </button>
+                                </form>
+                            {% endif %}
+
+                            <form method="POST" action="{{ url_for('delete_notification', notification_id=notif.id) }}" class="inline-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="next" value="{{ url_for('notifications_page', filter=filter_mode) }}">
+                                <button type="submit" class="btn-notif-control btn-notif-delete" title="Delete notification" onclick="return confirm('Delete this notification?')">
+                                    <span class="control-icon">&times;</span> Delete
+                                </button>
+                            </form>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <!-- Empty State -->
+            <div class="notifications-empty-box">
+                <div class="empty-icon-circle" aria-hidden="true">
+                    🔕
+                </div>
+                <h3 class="empty-title">
+                    {% if filter_mode == 'unread' %}
+                        You're all caught up!
+                    {% else %}
+                        No notifications yet
+                    {% endif %}
+                </h3>
+                <p class="empty-desc">
+                    {% if filter_mode == 'unread' %}
+                        There are no unread notifications waiting for your review.
+                    {% else %}
+                        When you post items, receive inquiries from fellow campus members, or update item statuses, notifications will appear here.
+                    {% endif %}
+                </p>
+                {% if filter_mode == 'unread' and total_count > 0 %}
+                    <a href="{{ url_for('notifications_page', filter='all') }}" class="btn-empty-action">
+                        View All Notifications ({{ total_count }})
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('index') }}" class="btn-empty-action">
+                        Browse Campus Listings
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+

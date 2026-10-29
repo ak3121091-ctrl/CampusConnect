@@ -122,8 +122,16 @@ def validate_and_process_image(file_storage, upload_folder):
         if save_format in ('JPEG', 'WEBP'):
             save_params['quality'] = 85
 
-        img.save(dest_path, **save_params)
-        return unique_filename
+        try:
+            img.save(dest_path, **save_params)
+            return unique_filename
+        except Exception:
+            if os.path.exists(dest_path):
+                try:
+                    os.remove(dest_path)
+                except OSError:
+                    pass
+            raise
 
     except ValueError:
         raise
