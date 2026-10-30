@@ -35,6 +35,8 @@ build/
 .idea/
 *.swp
 *.swo
+.agents/
+skills-lock.json
 
 # Operating System files
 .DS_Store
